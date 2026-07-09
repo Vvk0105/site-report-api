@@ -15,6 +15,12 @@ from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.dependencies import get_current_user
 
+from app.repositories.otp_repository import OTPRepository
+from app.repositories.login_log_repository import LoginLogRepository
+from app.services.email_service import EmailService
+from app.services.otp_service import OTPService
+from app.schemas.auth import SendOTPRequest, VerifyOTPRequest
+
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
@@ -61,19 +67,41 @@ async def me(
         "is_admin": current_user.is_admin,
     }
 
-from app.services.email_service import EmailService
 
+@router.post("/send-otp")
+async def send_otp(
+    request: SendOTPRequest,
+    db: AsyncSession = Depends(get_db),
+):
 
-@router.get("/test-email")
-async def test_email():
-
-    service = EmailService()
-
-    await service.send_otp(
-        "vivekbabu0105@gmail.com",
-        "123456",
+    service = OTPService(
+        db=db,
+        otp_repo=OTPRepository(db),
+        email_service=EmailService(),
     )
 
-    return {
-        "message": "Email Sent"
-    }
+    return await service.send_otp(
+        request.email,
+    )
+
+@router.post(
+    "/verify-otp",
+    response_model=LoginResponse,
+)
+async def verify_otp(
+    request: VerifyOTPRequest,
+    db: AsyncSession = Depends(get_db),
+):
+
+    service = OTPService(
+        db=db,
+        otp_repo=OTPRepository(db),
+        email_service=EmailService(),
+    )
+
+    return await service.verify_otp(
+        email=request.email,
+        otp=request.otp,
+        user_repo=UserRepository(db),
+        login_repo=LoginLogRepository(db),
+    )

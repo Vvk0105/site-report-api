@@ -24,17 +24,18 @@ class OTPRepository:
 
         return result.scalar_one_or_none()
 
-    async def create(
+    def create(
         self,
         otp: OTPCode,
     ):
-
         self.db.add(otp)
 
-    async def update(
+
+    def update(
         self,
         otp: OTPCode,
     ):
+        self.db.add(otp)
 
         self.db.add(otp)
 
@@ -58,11 +59,9 @@ class OTPRepository:
             )
         )
 
-    async def increment_attempt(
+    def increment_attempt(
         self,
         otp: OTPCode,
     ):
-
         otp.attempts += 1
-
         self.db.add(otp)

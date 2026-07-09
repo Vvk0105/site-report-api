@@ -1,10 +1,180 @@
 import secrets
+from datetime import datetime, timedelta, timezone
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from fastapi import HTTPException
 
-from app.core.security import (
-    hash_password,
-    verify_password,
+from app.core.constants import (
+    OTP_EXPIRE_MINUTES,
+    OTP_RESEND_SECONDS,
 )
+from app.core.security import hash_password
+from app.models.otp import OTPCode
+from app.core.constants import OTP_MAX_ATTEMPTS
+from app.core.security import (
+    verify_password,
+    create_access_token,
+)
+
+from app.models.login_log import LoginLog
+from app.models.user import User
+
+
+class OTPService:
+
+    def __init__(
+        self,
+        db,
+        otp_repo,
+        email_service,
+    ):
+        self.db = db
+        self.otp_repo = otp_repo
+        self.email_service = email_service
+
+    async def send_otp(self, email: str):
+
+        existing = await self.otp_repo.get_by_email(email)
+
+        now = datetime.now(timezone.utc)
+
+        if existing:
+
+            created = existing.created_at
+
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+
+            seconds = (now - created).total_seconds()
+
+            if seconds < OTP_RESEND_SECONDS:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Please wait {OTP_RESEND_SECONDS} seconds before requesting another OTP.",
+                )
+
+            await self.otp_repo.delete(existing)
+
+        otp = str(
+            secrets.randbelow(900000) + 100000
+        )
+
+        otp_model = OTPCode(
+            email=email,
+            otp_hash=hash_password(otp),
+            expires_at=now + timedelta(
+                minutes=OTP_EXPIRE_MINUTES
+            ),
+        )
+
+        try:
+            self.otp_repo.create(otp_model)
+
+            await self.db.flush()
+
+            await self.email_service.send_otp(
+                email=email,
+                otp=otp,
+            )
+
+            await self.db.commit()
+
+        except Exception:
+            await self.db.rollback()
+            raise
+
+        return {
+            "message": "OTP sent successfully"
+        }
+    
+    async def verify_otp(
+        self,
+        email: str,
+        otp: str,
+        user_repo,
+        login_repo,
+    ):
+
+        otp_row = await self.otp_repo.get_by_email(email)
+
+        if not otp_row:
+            raise HTTPException(
+                status_code=404,
+                detail="OTP not found",
+            )
+
+        now = datetime.now(timezone.utc)
+
+        expires = otp_row.expires_at
+
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+
+        if now > expires:
+
+            await self.otp_repo.delete(otp_row)
+
+            await self.db.commit()
+
+            raise HTTPException(
+                status_code=400,
+                detail="OTP expired",
+            )
+
+        if not verify_password(
+            otp,
+            otp_row.otp_hash,
+        ):
+
+            self.otp_repo.increment_attempt(
+                otp_row
+            )
+
+            if otp_row.attempts >= OTP_MAX_ATTEMPTS:
+
+                await self.otp_repo.delete(
+                    otp_row
+                )
+
+            await self.db.commit()
+
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid OTP",
+            )
+
+        user = await user_repo.get_by_email(email)
+
+        if not user:
+
+            user = User(
+                email=email,
+                is_active=True,
+                is_admin=False,
+            )
+
+            user_repo.create(user)
+
+            await self.db.flush()
+
+        login_repo.create(
+            LoginLog(
+                user_id=user.id,
+            )
+        )
+
+        token = create_access_token(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "is_admin": user.is_admin,
+            }
+        )
+
+        await self.otp_repo.delete(otp_row)
+
+        await self.db.commit()
+
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+        }

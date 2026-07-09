@@ -8,28 +8,40 @@ from app.core.config import settings
 
 
 pwd_context = CryptContext(
+
     schemes=["bcrypt"],
+
     deprecated="auto",
+
 )
 
 
 def hash_password(password: str) -> str:
+
     return pwd_context.hash(password)
 
 
-def verify_password(password: str, hashed: str):
-    return pwd_context.verify(password, hashed)
+def verify_password(password: str, hashed_password: str):
+
+    return pwd_context.verify(
+        password,
+        hashed_password,
+    )
 
 
 def create_access_token(data: dict):
 
     payload = data.copy()
 
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(
+        timezone.utc
+    ) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
-    payload.update({"exp": expire})
+    payload.update(
+        {"exp": expire}
+    )
 
     return jwt.encode(
         payload,

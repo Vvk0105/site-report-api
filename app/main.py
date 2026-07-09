@@ -1,8 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, users, subscriptions, reports, dashboard, stripe
+from app.api.v1 import auth, users, subscriptions, reports, dashboard, stripe
+from app.api.v1.auth import router as auth_router
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Site Report API", version="1.0.0")
+from app.db.database import SessionLocal
+from app.startup.seed import seed_admin
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    async with SessionLocal() as db:
+        await seed_admin(db)
+
+    yield
+
+app = FastAPI(title="Site Report API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -12,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(auth_router,prefix="/api/v1")
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])

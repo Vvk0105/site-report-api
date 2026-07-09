@@ -9,12 +9,13 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
 from app.db.database import Base
+
 from app.models.base import TimestampMixin
 
 
-class User(Base, TimestampMixin):
+class OTPCode(Base, TimestampMixin):
 
-    __tablename__ = "users"
+    __tablename__ = "otp_codes"
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -23,29 +24,22 @@ class User(Base, TimestampMixin):
 
     email: Mapped[str] = mapped_column(
         String(255),
-        unique=True,
         index=True,
         nullable=False,
     )
 
-    full_name: Mapped[str | None] = mapped_column(
-        String(255),
-        nullable=True,
-    )
-
-    password_hash: Mapped[str | None] = mapped_column(
-        String(255),
-        nullable=True,
-    )
-
-    is_admin: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
+    otp: Mapped[str] = mapped_column(
+        String(6),
         nullable=False,
     )
 
-    is_active: Mapped[bool] = mapped_column(
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    verified: Mapped[bool] = mapped_column(
         Boolean,
-        default=True,
+        default=False,
         nullable=False,
     )

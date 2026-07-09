@@ -13,7 +13,7 @@ from app.schemas.auth import (
 
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
-
+from app.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/auth",
@@ -48,3 +48,32 @@ async def admin_login(
     return LoginResponse(
         access_token=token,
     )
+
+@router.get("/me")
+async def me(
+    current_user=Depends(get_current_user),
+):
+
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "is_admin": current_user.is_admin,
+    }
+
+from app.services.email_service import EmailService
+
+
+@router.get("/test-email")
+async def test_email():
+
+    service = EmailService()
+
+    await service.send_otp(
+        "vivekbabu0105@gmail.com",
+        "123456",
+    )
+
+    return {
+        "message": "Email Sent"
+    }

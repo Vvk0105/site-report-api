@@ -26,3 +26,13 @@ class UserRepository:
         await self.db.refresh(user)
 
         return user
+    
+    async def get_by_id(self, user_id: int):
+
+        result = await self.db.execute(
+            select(User).where(
+                User.id == user_id
+            )
+        )
+
+        return result.scalar_one_or_none()

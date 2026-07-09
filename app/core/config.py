@@ -20,6 +20,13 @@ class Settings(BaseSettings):
 
     ADMIN_PASSWORD: str
 
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USERNAME: str
+    SMTP_PASSWORD: str
+    SMTP_FROM: str
+    SMTP_SSL: bool
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

@@ -23,3 +23,21 @@ class SubscriptionRepository:
         subscription: Subscription,
     ):
         self.db.add(subscription)
+
+    async def list_all(self):
+
+        result = await self.db.execute(
+            select(Subscription)
+            .order_by(
+                Subscription.start_date.desc()
+            )
+        )
+
+        return result.scalars().all()
+    
+    def update(
+        self,
+        subscription: Subscription,
+    ):
+
+        self.db.add(subscription)

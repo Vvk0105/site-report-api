@@ -48,7 +48,7 @@ async def get_current_admin(
 
         raise HTTPException(
             status_code=403,
-            detail="Admin only",
+            detail="Admin access required",
         )
 
     return current_user

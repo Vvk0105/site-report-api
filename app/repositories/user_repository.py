@@ -2,7 +2,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-
+from sqlalchemy import func
+from sqlalchemy import or_
 
 class UserRepository:
 
@@ -42,3 +43,72 @@ class UserRepository:
         )
 
         return result.scalar_one_or_none() is not None
+    
+    async def admin_users(
+        self,
+        page: int,
+        page_size: int,
+        search: str | None,
+    ):
+
+        query = (
+            select(User)
+            .order_by(User.created_at.desc())
+        )
+
+        if search:
+
+            query = query.where(
+                or_(
+                    User.email.ilike(f"%{search}%"),
+                    User.full_name.ilike(f"%{search}%"),
+                )
+            )
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(
+                query.subquery()
+            )
+        )
+
+        result = await self.db.execute(
+            query.offset(
+                (page - 1) * page_size
+            ).limit(page_size)
+        )
+
+        return total, result.scalars().all()
+    
+    def create(
+        self,
+        user: User,
+    ):
+
+        self.db.add(user)
+
+    async def get(
+        self,
+        user_id: int,
+    ):
+
+        result = await self.db.execute(
+            select(User).where(
+                User.id == user_id
+            )
+        )
+
+        return result.scalar_one_or_none()
+    
+    async def delete(
+        self,
+        user: User,
+    ):
+
+        await self.db.delete(user)
+
+    def update(
+        self,
+        user: User,
+    ):
+
+        self.db.add(user)

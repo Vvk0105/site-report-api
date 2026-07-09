@@ -18,17 +18,31 @@ from app.core.security import (
 from app.models.login_log import LoginLog
 from app.models.user import User
 
+from datetime import datetime, timezone
+
+from app.enums.subscription import (
+    PlanType,
+    SubscriptionStatus,
+)
+from app.repositories.subscription_repository import SubscriptionRepository
+from app.repositories.user_repository import UserRepository
+from app.repositories.login_log_repository import LoginLogRepository
+from app.repositories.otp_repository import OTPRepository
+from app.models.subscription import Subscription
 
 class OTPService:
 
     def __init__(
         self,
         db,
-        otp_repo,
         email_service,
     ):
+
         self.db = db
-        self.otp_repo = otp_repo
+        self.user_repo = UserRepository(db)
+        self.otp_repo = OTPRepository(db)
+        self.login_repo = LoginLogRepository(db)
+        self.subscription_repo = SubscriptionRepository(db)
         self.email_service = email_service
 
     async def send_otp(self, email: str):
@@ -90,8 +104,6 @@ class OTPService:
         self,
         email: str,
         otp: str,
-        user_repo,
-        login_repo,
     ):
 
         otp_row = await self.otp_repo.get_by_email(email)
@@ -142,7 +154,7 @@ class OTPService:
                 detail="Invalid OTP",
             )
 
-        user = await user_repo.get_by_email(email)
+        user = await self.user_repo.get_by_email(email)
 
         if not user:
 
@@ -152,11 +164,21 @@ class OTPService:
                 is_admin=False,
             )
 
-            user_repo.create(user)
+            self.user_repo.create(user)
 
             await self.db.flush()
 
-        login_repo.create(
+            subscription = Subscription(
+                user_id=user.id,
+                plan_type=PlanType.TRIAL,
+                status=SubscriptionStatus.ACTIVE,
+                report_limit=5,
+                start_date=datetime.now(timezone.utc),
+            )
+
+            self.subscription_repo.create(subscription)
+
+        self.login_repo.create(
             LoginLog(
                 user_id=user.id,
             )

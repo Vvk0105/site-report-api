@@ -76,7 +76,6 @@ async def send_otp(
 
     service = OTPService(
         db=db,
-        otp_repo=OTPRepository(db),
         email_service=EmailService(),
     )
 
@@ -95,13 +94,10 @@ async def verify_otp(
 
     service = OTPService(
         db=db,
-        otp_repo=OTPRepository(db),
         email_service=EmailService(),
     )
 
     return await service.verify_otp(
         email=request.email,
         otp=request.otp,
-        user_repo=UserRepository(db),
-        login_repo=LoginLogRepository(db),
     )

@@ -1,5 +1,5 @@
 from datetime import datetime
-
+from pydantic import EmailStr
 from pydantic import BaseModel
 
 
@@ -36,3 +36,9 @@ class ReportResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SendReportEmailRequest(BaseModel):
+    customer_email: EmailStr
+    inspector_email: EmailStr
+    inspector_name: str
+    cc_email: EmailStr | None = None

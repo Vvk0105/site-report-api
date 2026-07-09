@@ -9,8 +9,10 @@ from app.repositories.report_repository import ReportRepository
 from app.services.subscription_service import SubscriptionService
 
 from app.utils.report_number import generate_report_number
-from fastapi import HTTPException
 
+from fastapi import UploadFile, HTTPException
+
+from app.services.email_service import EmailService
 class ReportService:
 
     def __init__(self, db):
@@ -20,6 +22,8 @@ class ReportService:
         self.report_repo = ReportRepository(db)
 
         self.subscription_service = SubscriptionService(db)
+
+        self.email_service = EmailService()
 
     async def start_report(
         self,
@@ -110,3 +114,71 @@ class ReportService:
         return await self.report_repo.history(
             user_id
         )
+    
+    async def get_report(
+        self,
+        report_id: int,
+        user_id: int,
+    ):
+
+        report = await self.report_repo.get_by_id(
+            report_id
+        )
+
+        if not report:
+            raise HTTPException(
+                status_code=404,
+                detail="Report not found",
+            )
+
+        if report.user_id != user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Permission denied",
+            )
+
+        return report
+    
+    async def send_email(
+        self,
+        report_id: int,
+        user,
+        pdf: UploadFile,
+        to_email: str,
+        cc_email: str | None,
+        subject: str,
+        body: str,
+    ):
+        report = await self.report_repo.get_by_id(
+            report_id
+        )
+
+        if not report:
+            raise HTTPException(
+                status_code=404,
+                detail="Report not found",
+            )
+
+        if report.user_id != user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Permission denied",
+            )
+
+        await self.email_service.send_report_pdf(
+            pdf=pdf,
+            to_email=to_email,
+            cc_email=cc_email,
+            subject=subject,
+            body=body,
+            inspector_name=user.full_name or user.email,
+            inspector_email=user.email,
+        )
+
+        report.email_sent = True
+
+        await self.db.commit()
+
+        return {
+            "message": "Email sent successfully"
+        }

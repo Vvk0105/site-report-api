@@ -3,8 +3,6 @@ from datetime import datetime
 
 def generate_report_number(
     report_id: int,
-):
+) -> str:
 
-    date = datetime.utcnow().strftime("%Y%m%d")
-
-    return f"SR-{date}-{report_id:06d}"
+    return f"SR-{datetime.utcnow():%Y%m%d}-{report_id:06d}"

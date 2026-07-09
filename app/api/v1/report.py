@@ -14,6 +14,10 @@ from app.schemas.report import (
     ReportResponse
 )
 
+from fastapi import File
+from fastapi import Form
+from fastapi import UploadFile
+
 from app.services.report_service import ReportService
 
 router = APIRouter(
@@ -72,4 +76,45 @@ async def history(
 
     return await service.history(
         current_user.id,
+    )
+
+@router.get(
+    "/{report_id}",
+    response_model=ReportResponse,
+)
+async def get_report(
+    report_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+
+    service = ReportService(db)
+
+    return await service.get_report(
+        report_id=report_id,
+        user_id=current_user.id,
+    )
+
+@router.post("/{report_id}/send-email")
+async def send_email(
+    report_id: int,
+    pdf: UploadFile = File(...),
+    to_email: str = Form(...),
+    cc_email: str | None = Form(None),
+    subject: str = Form(...),
+    body: str = Form(...),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+
+    service = ReportService(db)
+
+    return await service.send_email(
+        report_id=report_id,
+        user=current_user,
+        pdf=pdf,
+        to_email=to_email,
+        cc_email=cc_email,
+        subject=subject,
+        body=body,
     )

@@ -12,3 +12,4 @@ stripe>=5.0.0
 aiosmtplib
 email-validator
 asyncpg
+fastapi-mail

@@ -18,7 +18,10 @@ from app.schemas.admin import (
     AdminUserDetailResponse,
     UpdateUserRequest,
     UpdateSubscriptionRequest,
-    AdminSubscriptionResponse
+    AdminSubscriptionResponse,
+    AdminReportListResponse,
+    AdminReportResponse,
+
 )
 
 from app.services.admin_user_service import (
@@ -28,6 +31,10 @@ from app.services.admin_user_service import (
 
 from app.services.subscription_service import (
     SubscriptionService,
+)
+
+from app.services.admin_report_service import (
+    AdminReportService,
 )
 
 router = APIRouter(
@@ -182,4 +189,55 @@ async def update_subscription(
         report_limit=request.report_limit,
         status=request.status,
         end_date=request.end_date,
+    )
+
+@router.get(
+    "/reports",
+    response_model=AdminReportListResponse,
+)
+async def reports(
+    page: int = Query(1),
+    page_size: int = Query(20),
+    search: str | None = None,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await AdminReportService(
+        db,
+    ).list_reports(
+        page,
+        page_size,
+        search,
+    )
+
+@router.get(
+    "/reports/{report_id}",
+    response_model=AdminReportResponse,
+)
+async def report(
+    report_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await AdminReportService(
+        db,
+    ).get_report(
+        report_id,
+    )
+
+@router.delete(
+    "/reports/{report_id}",
+)
+async def delete_report(
+    report_id: int,
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await AdminReportService(
+        db,
+    ).delete_report(
+        report_id,
     )

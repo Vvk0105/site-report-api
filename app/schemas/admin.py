@@ -123,3 +123,36 @@ class AdminSubscriptionResponse(BaseModel):
     start_date: datetime
 
     end_date: datetime | None
+
+class AdminReportResponse(BaseModel):
+
+    id: int
+
+    report_number: str
+
+    user_id: int
+
+    inspector_email: EmailStr
+
+    status: str
+
+    email_sent: bool
+
+    device_id: str | None
+
+    app_version: str | None
+
+    created_at: datetime
+
+    completed_at: datetime | None
+
+
+class AdminReportListResponse(BaseModel):
+
+    total: int
+
+    page: int
+
+    page_size: int
+
+    results: list[AdminReportResponse]

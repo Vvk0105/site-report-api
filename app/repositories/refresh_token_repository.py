@@ -2,6 +2,8 @@ from sqlalchemy import select
 
 from app.models.refresh_token import RefreshToken
 
+from datetime import datetime
+from datetime import timezone
 
 class RefreshTokenRepository:
 
@@ -67,3 +69,29 @@ class RefreshTokenRepository:
             self.db.add(
                 token,
             )
+
+    async def get_valid(
+        self,
+        token: str,
+    ):
+
+        result = await self.db.execute(
+            select(
+                RefreshToken
+            ).where(
+                RefreshToken.token == token,
+                RefreshToken.revoked == False,
+            )
+        )
+
+        refresh = result.scalar_one_or_none()
+
+        if not refresh:
+            return None
+
+        if refresh.expires_at < datetime.now(
+            timezone.utc,
+        ):
+            return None
+
+        return refresh

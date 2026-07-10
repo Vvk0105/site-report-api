@@ -14,6 +14,8 @@ from app.core.security import (
 
 from app.core.constants import REFRESH_TOKEN_EXPIRE_DAYS
 
+from fastapi import HTTPException
+
 class AuthService:
 
     def __init__(self, repo):
@@ -67,5 +69,63 @@ class AuthService:
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
+            "token_type": "bearer",
+        }
+    
+    async def refresh(
+        self,
+        refresh_token: str,
+    ):
+
+        token = await self.refresh_repo.get_valid(
+            refresh_token,
+        )
+
+        if not token:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid refresh token",
+            )
+
+        user = await self.repo.get_by_id(
+            token.user_id,
+        )
+
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found",
+            )
+
+        token.revoked = True
+
+        new_refresh = create_refresh_token()
+
+        await self.refresh_repo.create(
+            RefreshToken(
+                user_id=user.id,
+                token=new_refresh,
+                expires_at=datetime.now(
+                    timezone.utc,
+                )
+                + timedelta(
+                    days=REFRESH_TOKEN_EXPIRE_DAYS,
+                ),
+            )
+        )
+
+        access = create_access_token(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "is_admin": user.is_admin,
+            }
+        )
+
+        await self.repo.db.commit()
+
+        return {
+            "access_token": access,
+            "refresh_token": new_refresh,
             "token_type": "bearer",
         }

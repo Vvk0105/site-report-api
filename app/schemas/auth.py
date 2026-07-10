@@ -19,3 +19,6 @@ class SendOTPRequest(BaseModel):
 class VerifyOTPRequest(BaseModel):
     email: EmailStr
     otp: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str

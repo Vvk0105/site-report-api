@@ -6,6 +6,8 @@ from app.models.report import Report
 from app.enums.report import ReportStatus
 from app.models.user import User
 
+from sqlalchemy import and_, asc, desc
+
 class ReportRepository:
 
     def __init__(self, db):
@@ -66,6 +68,12 @@ class ReportRepository:
         page: int,
         page_size: int,
         search: str | None,
+        status: str | None = None,
+        email_sent: bool | None = None,
+        date_from=None,
+        date_to=None,
+        sort: str = "created_at",
+        order: str = "desc",
     ):
 
         query = (
@@ -77,14 +85,13 @@ class ReportRepository:
                 User,
                 User.id == Report.user_id,
             )
-            .order_by(
-                Report.created_at.desc(),
-            )
         )
+
+        filters = []
 
         if search:
 
-            query = query.where(
+            filters.append(
                 or_(
                     Report.report_number.ilike(
                         f"%{search}%"
@@ -94,6 +101,48 @@ class ReportRepository:
                     ),
                 )
             )
+
+        if status:
+
+            filters.append(
+                Report.status == status
+            )
+
+        if email_sent is not None:
+
+            filters.append(
+                Report.email_sent == email_sent
+            )
+
+        if date_from:
+
+            filters.append(
+                Report.created_at >= date_from
+            )
+
+        if date_to:
+
+            filters.append(
+                Report.created_at <= date_to
+            )
+
+        if filters:
+
+            query = query.where(
+                and_(*filters)
+            )
+
+        sort_column = getattr(
+            Report,
+            sort,
+            Report.created_at,
+        )
+
+        query = query.order_by(
+            asc(sort_column)
+            if order == "asc"
+            else desc(sort_column)
+        )
 
         total = await self.db.scalar(
             select(func.count()).select_from(

@@ -17,12 +17,20 @@ class LoginLogService:
         page,
         page_size,
         search,
+        date_from=None,
+        date_to=None,
+        sort="login_at",
+        order="desc",
     ):
 
         total, rows = await self.log_repo.admin_logs(
-            page,
-            page_size,
-            search,
+            page=page,
+            page_size=page_size,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+            sort=sort,
+            order=order,
         )
 
         results = []

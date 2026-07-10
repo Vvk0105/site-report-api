@@ -33,12 +33,24 @@ class AdminUserService:
         page,
         page_size,
         search,
+        plan=None,
+        status=None,
+        date_from=None,
+        date_to=None,
+        sort="created_at",
+        order="desc",
     ):
 
         total, rows = await self.user_repo.admin_users(
-            page,
-            page_size,
-            search,
+            page=page,
+            page_size=page_size,
+            search=search,
+            plan=plan,
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
+            sort=sort,
+            order=order,
         )
 
         results = []

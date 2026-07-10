@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from app.models.subscription import Subscription
 from app.models.report import Report
 from app.enums.report import ReportStatus
-
+from sqlalchemy import and_, asc, desc
 class UserRepository:
 
     def __init__(self, db: AsyncSession):
@@ -53,12 +53,20 @@ class UserRepository:
         page: int,
         page_size: int,
         search: str | None,
+        plan: str | None = None,
+        status: bool | None = None,
+        date_from=None,
+        date_to=None,
+        sort: str = "created_at",
+        order: str = "desc",
     ):
 
         report_count = (
             select(
                 Report.user_id,
-                func.count(Report.id).label(
+                func.count(
+                    Report.id
+                ).label(
                     "reports_used"
                 ),
             )
@@ -90,14 +98,13 @@ class UserRepository:
                 report_count,
                 report_count.c.user_id == User.id,
             )
-            .order_by(
-                User.created_at.desc(),
-            )
         )
+
+        filters = []
 
         if search:
 
-            query = query.where(
+            filters.append(
                 or_(
                     User.email.ilike(
                         f"%{search}%"
@@ -106,6 +113,56 @@ class UserRepository:
                         f"%{search}%"
                     ),
                 )
+            )
+
+        if plan:
+
+            filters.append(
+                Subscription.plan_type == plan
+            )
+
+        if status is not None:
+
+            filters.append(
+                User.is_active == status
+            )
+
+        if date_from:
+
+            filters.append(
+                User.created_at >= date_from
+            )
+
+        if date_to:
+
+            filters.append(
+                User.created_at <= date_to
+            )
+
+        if filters:
+
+            query = query.where(
+                and_(
+                    *filters,
+                )
+            )
+
+        sort_column = getattr(
+            User,
+            sort,
+            User.created_at,
+        )
+
+        if order == "asc":
+
+            query = query.order_by(
+                asc(sort_column),
+            )
+
+        else:
+
+            query = query.order_by(
+                desc(sort_column),
             )
 
         total = await self.db.scalar(

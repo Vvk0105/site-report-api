@@ -20,12 +20,24 @@ class AdminReportService:
         page,
         page_size,
         search,
+        status=None,
+        email_sent=None,
+        date_from=None,
+        date_to=None,
+        sort="created_at",
+        order="desc",
     ):
 
         total, rows = await self.report_repo.admin_reports(
-            page,
-            page_size,
-            search,
+            page=page,
+            page_size=page_size,
+            search=search,
+            status=status,
+            email_sent=email_sent,
+            date_from=date_from,
+            date_to=date_to,
+            sort=sort,
+            order=order,
         )
 
         results = []

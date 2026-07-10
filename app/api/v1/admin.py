@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from app.dependencies import get_current_admin
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from datetime import datetime
 from app.db.database import get_db
 
 from app.schemas.admin import DashboardResponse
@@ -76,19 +76,31 @@ async def dashboard(
     response_model=AdminUserListResponse,
 )
 async def users(
-    page: int = Query(1),
-    page_size: int = Query(20),
+    page: int = 1,
+    page_size: int = 20,
     search: str | None = None,
+    plan: str | None = None,
+    status: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    sort: str = "created_at",
+    order: str = "desc",
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
 
     return await AdminUserService(
-        db
+        db,
     ).list_users(
-        page,
-        page_size,
-        search,
+        page=page,
+        page_size=page_size,
+        search=search,
+        plan=plan,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        sort=sort,
+        order=order,
     )
 
 
@@ -201,9 +213,15 @@ async def update_subscription(
     response_model=AdminReportListResponse,
 )
 async def reports(
-    page: int = Query(1),
-    page_size: int = Query(20),
+    page: int = 1,
+    page_size: int = 20,
     search: str | None = None,
+    status: str | None = None,
+    email_sent: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    sort: str = "created_at",
+    order: str = "desc",
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -211,9 +229,15 @@ async def reports(
     return await AdminReportService(
         db,
     ).list_reports(
-        page,
-        page_size,
-        search,
+        page=page,
+        page_size=page_size,
+        search=search,
+        status=status,
+        email_sent=email_sent,
+        date_from=date_from,
+        date_to=date_to,
+        sort=sort,
+        order=order,
     )
 
 @router.get(
@@ -252,9 +276,13 @@ async def delete_report(
     response_model=LoginLogListResponse,
 )
 async def login_logs(
-    page: int = Query(1),
-    page_size: int = Query(20),
+    page: int = 1,
+    page_size: int = 20,
     search: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    sort: str = "login_at",
+    order: str = "desc",
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -262,7 +290,11 @@ async def login_logs(
     return await LoginLogService(
         db,
     ).list_logs(
-        page,
-        page_size,
-        search,
+        page=page,
+        page_size=page_size,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        sort=sort,
+        order=order,
     )

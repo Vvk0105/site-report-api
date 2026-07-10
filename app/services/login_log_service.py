@@ -1,6 +1,6 @@
 from app.repositories.login_log_repository import LoginLogRepository
 from app.repositories.user_repository import UserRepository
-
+from app.utils.pagination import paginate
 
 class LoginLogService:
 
@@ -40,9 +40,9 @@ class LoginLogService:
                 }
             )
 
-        return {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "results": results,
-        }
+        return paginate(
+            total=total,
+            page=page,
+            page_size=page_size,
+            results=results,
+        )

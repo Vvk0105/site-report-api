@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
+from app.utils.pagination import paginate
 
 class AdminUserService:
 
@@ -61,12 +62,12 @@ class AdminUserService:
                 }
             )
 
-        return {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "results": results,
-        }
+        return paginate(
+            total=total,
+            page=page,
+            page_size=page_size,
+            results=results,
+        )
 
     async def create_user(
         self,

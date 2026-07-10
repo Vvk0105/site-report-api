@@ -50,6 +50,12 @@ class AdminUserListResponse(BaseModel):
 
     page_size: int
 
+    total_pages: int
+
+    has_next: bool
+
+    has_previous: bool
+
     results: list[AdminUserResponse]
 
 
@@ -155,6 +161,12 @@ class AdminReportListResponse(BaseModel):
 
     page_size: int
 
+    total_pages: int
+
+    has_next: bool
+
+    has_previous: bool
+
     results: list[AdminReportResponse]
 
 class LoginLogResponse(BaseModel):
@@ -179,5 +191,11 @@ class LoginLogListResponse(BaseModel):
     page: int
 
     page_size: int
+
+    total_pages: int
+
+    has_next: bool
+
+    has_previous: bool
 
     results: list[LoginLogResponse]

@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from app.repositories.report_repository import ReportRepository
 from app.repositories.user_repository import UserRepository
 
+from app.utils.pagination import paginate
 
 class AdminReportService:
 
@@ -46,12 +47,12 @@ class AdminReportService:
                 }
             )
 
-        return {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "results": results,
-        }
+        return paginate(
+            total=total,
+            page=page,
+            page_size=page_size,
+            results=results,
+        )
 
     async def get_report(
         self,

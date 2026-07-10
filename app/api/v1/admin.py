@@ -254,6 +254,7 @@ async def delete_report(
 async def login_logs(
     page: int = Query(1),
     page_size: int = Query(20),
+    search: str | None = None,
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -263,4 +264,5 @@ async def login_logs(
     ).list_logs(
         page,
         page_size,
+        search,
     )

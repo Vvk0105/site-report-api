@@ -16,26 +16,24 @@ class LoginLogService:
         self,
         page,
         page_size,
+        search,
     ):
 
-        total, logs = await self.log_repo.admin_logs(
+        total, rows = await self.log_repo.admin_logs(
             page,
             page_size,
+            search,
         )
 
         results = []
 
-        for log in logs:
-
-            user = await self.user_repo.get_by_id(
-                log.user_id
-            )
+        for log, email in rows:
 
             results.append(
                 {
                     "id": log.id,
-                    "user_id": user.id,
-                    "email": user.email,
+                    "user_id": log.user_id,
+                    "email": email,
                     "ip_address": log.ip_address,
                     "user_agent": log.user_agent,
                     "login_at": log.login_at,

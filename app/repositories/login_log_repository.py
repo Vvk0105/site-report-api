@@ -1,6 +1,8 @@
 from app.models.login_log import LoginLog
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy import or_
+from app.models.user import User
 
 class LoginLogRepository:
 
@@ -14,14 +16,30 @@ class LoginLogRepository:
         self,
         page: int,
         page_size: int,
+        search: str | None,
     ):
 
         query = (
-            select(LoginLog)
+            select(
+                LoginLog,
+                User.email.label("email"),
+            )
+            .join(
+                User,
+                User.id == LoginLog.user_id,
+            )
             .order_by(
-                LoginLog.login_at.desc()
+                LoginLog.login_at.desc(),
             )
         )
+
+        if search:
+
+            query = query.where(
+                User.email.ilike(
+                    f"%{search}%"
+                )
+            )
 
         total = await self.db.scalar(
             select(func.count()).select_from(
@@ -35,4 +53,4 @@ class LoginLogRepository:
             ).limit(page_size)
         )
 
-        return total, result.scalars().all()
+        return total, result.all()

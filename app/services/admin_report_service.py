@@ -21,7 +21,7 @@ class AdminReportService:
         search,
     ):
 
-        total, reports = await self.report_repo.admin_reports(
+        total, rows = await self.report_repo.admin_reports(
             page,
             page_size,
             search,
@@ -29,18 +29,14 @@ class AdminReportService:
 
         results = []
 
-        for report in reports:
-
-            user = await self.user_repo.get_by_id(
-                report.user_id
-            )
+        for report, email in rows:
 
             results.append(
                 {
                     "id": report.id,
                     "report_number": report.report_number,
-                    "user_id": user.id,
-                    "inspector_email": user.email,
+                    "user_id": report.user_id,
+                    "inspector_email": email,
                     "status": report.status.value,
                     "email_sent": report.email_sent,
                     "device_id": report.device_id,
@@ -63,23 +59,23 @@ class AdminReportService:
     ):
 
         report = await self.report_repo.get_by_id(
-            report_id
+            report_id,
         )
 
         if not report:
             raise HTTPException(
-                404,
-                "Report not found",
+                status_code=404,
+                detail="Report not found",
             )
 
         user = await self.user_repo.get_by_id(
-            report.user_id
+            report.user_id,
         )
 
         return {
             "id": report.id,
             "report_number": report.report_number,
-            "user_id": user.id,
+            "user_id": report.user_id,
             "inspector_email": user.email,
             "status": report.status.value,
             "email_sent": report.email_sent,

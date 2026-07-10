@@ -4,7 +4,7 @@ from sqlalchemy import or_
 
 from app.models.report import Report
 from app.enums.report import ReportStatus
-
+from app.models.user import User
 
 class ReportRepository:
 
@@ -69,17 +69,29 @@ class ReportRepository:
     ):
 
         query = (
-            select(Report)
+            select(
+                Report,
+                User.email.label("email"),
+            )
+            .join(
+                User,
+                User.id == Report.user_id,
+            )
             .order_by(
-                Report.created_at.desc()
+                Report.created_at.desc(),
             )
         )
 
         if search:
 
             query = query.where(
-                Report.report_number.ilike(
-                    f"%{search}%"
+                or_(
+                    Report.report_number.ilike(
+                        f"%{search}%"
+                    ),
+                    User.email.ilike(
+                        f"%{search}%"
+                    ),
                 )
             )
 
@@ -95,7 +107,7 @@ class ReportRepository:
             ).limit(page_size)
         )
 
-        return total, result.scalars().all()
+        return total, result.all()
     
     async def get_by_id(
         self,

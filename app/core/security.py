@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
+import secrets
 
 pwd_context = CryptContext(
 
@@ -62,3 +63,9 @@ def decode_access_token(token: str):
 
     except JWTError:
         return None
+    
+def create_refresh_token():
+
+    return secrets.token_urlsafe(
+        64,
+    )

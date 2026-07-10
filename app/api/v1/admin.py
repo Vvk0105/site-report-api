@@ -21,6 +21,7 @@ from app.schemas.admin import (
     AdminSubscriptionResponse,
     AdminReportListResponse,
     AdminReportResponse,
+    LoginLogListResponse
 
 )
 
@@ -35,6 +36,10 @@ from app.services.subscription_service import (
 
 from app.services.admin_report_service import (
     AdminReportService,
+)
+
+from app.services.login_log_service import (
+    LoginLogService,
 )
 
 router = APIRouter(
@@ -240,4 +245,22 @@ async def delete_report(
         db,
     ).delete_report(
         report_id,
+    )
+
+@router.get(
+    "/login-logs",
+    response_model=LoginLogListResponse,
+)
+async def login_logs(
+    page: int = Query(1),
+    page_size: int = Query(20),
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await LoginLogService(
+        db,
+    ).list_logs(
+        page,
+        page_size,
     )

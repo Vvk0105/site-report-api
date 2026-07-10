@@ -156,3 +156,28 @@ class AdminReportListResponse(BaseModel):
     page_size: int
 
     results: list[AdminReportResponse]
+
+class LoginLogResponse(BaseModel):
+
+    id: int
+
+    user_id: int
+
+    email: EmailStr
+
+    ip_address: str | None
+
+    user_agent: str | None
+
+    login_at: datetime
+
+
+class LoginLogListResponse(BaseModel):
+
+    total: int
+
+    page: int
+
+    page_size: int
+
+    results: list[LoginLogResponse]

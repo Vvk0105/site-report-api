@@ -7,9 +7,14 @@ from app.api.v1.report import router as report_router
 from contextlib import asynccontextmanager
 from app.api.v1.subscription import router as subscription_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.system import router as system_router
 
 from app.db.database import SessionLocal
 from app.startup.seed import seed_admin
+
+from app.core.exceptions import (
+    register_exception_handlers,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,6 +25,10 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="Site Report API", version="1.0.0", lifespan=lifespan)
+
+register_exception_handlers(
+    app,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,6 +47,7 @@ app.include_router(stripe.router, prefix="/api/stripe", tags=["stripe"])
 app.include_router(report_router)
 app.include_router(subscription_router)
 app.include_router(admin_router)
+app.include_router(system_router)
 
 @app.get("/")
 def read_root():

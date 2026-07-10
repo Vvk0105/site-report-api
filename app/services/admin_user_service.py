@@ -34,7 +34,7 @@ class AdminUserService:
         search,
     ):
 
-        total, users = await self.user_repo.admin_users(
+        total, rows = await self.user_repo.admin_users(
             page,
             page_size,
             search,
@@ -42,15 +42,7 @@ class AdminUserService:
 
         results = []
 
-        for user in users:
-
-            subscription = await self.subscription_repo.get_by_user_id(
-                user.id
-            )
-
-            reports = await self.report_repo.completed_count(
-                user.id
-            )
+        for user, subscription, reports_used in rows:
 
             results.append(
                 {
@@ -65,7 +57,7 @@ class AdminUserService:
                         if subscription
                         else "-"
                     ),
-                    "reports_used": reports,
+                    "reports_used": reports_used,
                 }
             )
 

@@ -5,6 +5,10 @@ from app.models.user import User
 from sqlalchemy import func
 from sqlalchemy import or_
 
+from app.models.subscription import Subscription
+from app.models.report import Report
+from app.enums.report import ReportStatus
+
 class UserRepository:
 
     def __init__(self, db: AsyncSession):
@@ -51,17 +55,56 @@ class UserRepository:
         search: str | None,
     ):
 
+        report_count = (
+            select(
+                Report.user_id,
+                func.count(Report.id).label(
+                    "reports_used"
+                ),
+            )
+            .where(
+                Report.status == ReportStatus.COMPLETED,
+            )
+            .group_by(
+                Report.user_id,
+            )
+            .subquery()
+        )
+
         query = (
-            select(User)
-            .order_by(User.created_at.desc())
+            select(
+                User,
+                Subscription,
+                func.coalesce(
+                    report_count.c.reports_used,
+                    0,
+                ).label(
+                    "reports_used",
+                ),
+            )
+            .outerjoin(
+                Subscription,
+                Subscription.user_id == User.id,
+            )
+            .outerjoin(
+                report_count,
+                report_count.c.user_id == User.id,
+            )
+            .order_by(
+                User.created_at.desc(),
+            )
         )
 
         if search:
 
             query = query.where(
                 or_(
-                    User.email.ilike(f"%{search}%"),
-                    User.full_name.ilike(f"%{search}%"),
+                    User.email.ilike(
+                        f"%{search}%"
+                    ),
+                    User.full_name.ilike(
+                        f"%{search}%"
+                    ),
                 )
             )
 
@@ -77,7 +120,7 @@ class UserRepository:
             ).limit(page_size)
         )
 
-        return total, result.scalars().all()
+        return total, result.all()
     
     def create(
         self,

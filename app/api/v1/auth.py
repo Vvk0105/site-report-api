@@ -19,8 +19,7 @@ from app.repositories.otp_repository import OTPRepository
 from app.repositories.login_log_repository import LoginLogRepository
 from app.services.email_service import EmailService
 from app.services.otp_service import OTPService
-from app.schemas.auth import SendOTPRequest, VerifyOTPRequest
-from app.schemas.auth import (RefreshTokenRequest)
+from app.schemas.auth import SendOTPRequest, VerifyOTPRequest, RefreshTokenRequest, LogoutRequest
 
 router = APIRouter(
     prefix="/auth",
@@ -115,5 +114,21 @@ async def refresh(
     )
 
     return await service.refresh(
+        request.refresh_token,
+    )
+
+@router.post(
+    "/logout",
+)
+async def logout(
+    request: LogoutRequest,
+    db: AsyncSession = Depends(get_db),
+):
+
+    service = AuthService(
+        UserRepository(db),
+    )
+
+    return await service.logout(
         request.refresh_token,
     )

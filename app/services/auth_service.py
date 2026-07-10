@@ -129,3 +129,18 @@ class AuthService:
             "refresh_token": new_refresh,
             "token_type": "bearer",
         }
+    
+    async def logout(
+        self,
+        refresh_token: str,
+    ):
+
+        await self.refresh_repo.revoke_token(
+            refresh_token,
+        )
+
+        await self.repo.db.commit()
+
+        return {
+            "message":"Logged out successfully",
+        }

@@ -95,3 +95,21 @@ class RefreshTokenRepository:
             return None
 
         return refresh
+    
+    async def revoke_token(
+        self,
+        token: str,
+    ):
+
+        refresh = await self.get(
+            token,
+        )
+
+        if not refresh:
+            return
+
+        refresh.revoked = True
+
+        self.db.add(
+            refresh,
+        )

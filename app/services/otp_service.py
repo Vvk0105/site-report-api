@@ -18,7 +18,7 @@ from app.core.security import (
 from app.models.login_log import LoginLog
 from app.models.user import User
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from app.enums.subscription import (
     PlanType,
@@ -29,6 +29,20 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.login_log_repository import LoginLogRepository
 from app.repositories.otp_repository import OTPRepository
 from app.models.subscription import Subscription
+
+from app.models.refresh_token import RefreshToken
+
+from app.repositories.refresh_token_repository import (
+    RefreshTokenRepository,
+)
+
+from app.core.constants import (
+    REFRESH_TOKEN_EXPIRE_DAYS,
+)
+
+from app.core.security import (
+    create_refresh_token,
+)
 
 class OTPService:
 
@@ -43,6 +57,7 @@ class OTPService:
         self.otp_repo = OTPRepository(db)
         self.login_repo = LoginLogRepository(db)
         self.subscription_repo = SubscriptionRepository(db)
+        self.refresh_repo = RefreshTokenRepository(db)
         self.email_service = email_service
 
     async def send_otp(self, email: str):
@@ -184,7 +199,7 @@ class OTPService:
             )
         )
 
-        token = create_access_token(
+        access_token = create_access_token(
             {
                 "sub": str(user.id),
                 "email": user.email,
@@ -192,11 +207,27 @@ class OTPService:
             }
         )
 
+        refresh_token = create_refresh_token()
+
+        self.refresh_repo.create(
+            RefreshToken(
+                user_id=user.id,
+                token=refresh_token,
+                expires_at=datetime.now(
+                    timezone.utc,
+                )
+                + timedelta(
+                    days=REFRESH_TOKEN_EXPIRE_DAYS,
+                ),
+            )
+        )
+
         await self.otp_repo.delete(otp_row)
 
         await self.db.commit()
 
         return {
-            "access_token": token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
         }

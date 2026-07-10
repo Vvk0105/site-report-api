@@ -40,20 +40,18 @@ async def admin_login(
 
     service = AuthService(repo)
 
-    token = await service.admin_login(
+    response = await service.admin_login(
         request.email,
         request.password,
     )
 
-    if not token:
+    if not response:
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials",
         )
 
-    return LoginResponse(
-        access_token=token,
-    )
+    return response
 
 @router.get("/me")
 async def me(

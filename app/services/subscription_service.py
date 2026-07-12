@@ -15,6 +15,7 @@ class SubscriptionService:
         self.db = db
         self.subscription_repo = SubscriptionRepository(db)
         self.report_repo = ReportRepository(db)
+        self.user_repo = UserRepository(db)
 
     async def get_subscription(
         self,

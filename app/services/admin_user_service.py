@@ -1,12 +1,12 @@
 from app.repositories.user_repository import UserRepository
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.report_repository import ReportRepository
+from app.repositories.plan_repository import PlanRepository
 
 from app.models.user import User
 from app.models.subscription import Subscription
 
 from app.enums.subscription import (
-    PlanType,
     SubscriptionStatus,
 )
 
@@ -27,6 +27,8 @@ class AdminUserService:
         self.subscription_repo = SubscriptionRepository(db)
 
         self.report_repo = ReportRepository(db)
+
+        self.plan_repo = PlanRepository(db)
 
     async def list_users(
         self,
@@ -66,7 +68,7 @@ class AdminUserService:
                     "is_admin": user.is_admin,
                     "created_at": user.created_at,
                     "plan_type": (
-                        subscription.plan_type.value
+                        subscription.plan.name
                         if subscription
                         else "-"
                     ),
@@ -108,11 +110,12 @@ class AdminUserService:
 
         await self.db.flush()
 
+        trial_plan = await self.plan_repo.get_trial_plan()
+
         subscription = Subscription(
             user_id=user.id,
-            plan_type=PlanType.TRIAL,
+            plan_id=trial_plan.id,
             status=SubscriptionStatus.ACTIVE,
-            report_limit=5,
             start_date=datetime.now(
                 timezone.utc,
             ),
@@ -133,7 +136,7 @@ class AdminUserService:
             "is_active": user.is_active,
             "is_admin": user.is_admin,
             "created_at": user.created_at,
-            "plan_type": subscription.plan_type.value,
+            "plan_type": subscription.plan.name,
             "reports_used": 0,
         }
     
@@ -168,7 +171,7 @@ class AdminUserService:
             "is_admin": user.is_admin,
             "created_at": user.created_at,
             "plan_type": (
-                subscription.plan_type.value
+                subscription.plan.name
                 if subscription
                 else "-"
             ),
@@ -178,7 +181,7 @@ class AdminUserService:
                 else "-"
             ),
             "report_limit": (
-                subscription.report_limit
+                subscription.plan.report_limit
                 if subscription
                 else 0
             ),
@@ -227,7 +230,7 @@ class AdminUserService:
             "is_admin": user.is_admin,
             "created_at": user.created_at,
             "plan_type": (
-                subscription.plan_type.value
+                subscription.plan.name
                 if subscription
                 else "-"
             ),

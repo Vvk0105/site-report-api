@@ -72,3 +72,14 @@ class PlanRepository:
     ):
 
         await self.db.delete(plan)
+
+    async def get_trial_plan(self):
+
+        result = await self.db.execute(
+            select(Plan).where(
+                Plan.is_trial == True,
+                Plan.is_active == True,
+            )
+        )
+
+        return result.scalar_one_or_none()

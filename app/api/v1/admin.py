@@ -202,8 +202,7 @@ async def update_subscription(
         db,
     ).admin_update(
         user_id=user_id,
-        plan_type=request.plan_type,
-        report_limit=request.report_limit,
+        plan_id=request.plan_id,
         status=request.status,
         end_date=request.end_date,
     )

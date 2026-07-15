@@ -35,3 +35,47 @@ class StripeService:
             product.id,
             stripe_price.id,
         )
+    
+    def create_checkout_session(
+        self,
+        *,
+        plan,
+        user,
+    ):
+
+        session = stripe.checkout.Session.create(
+
+            mode="subscription",
+
+            customer_email=user.email,
+
+            line_items=[
+                {
+                    "price": plan.stripe_price_id,
+                    "quantity": 1,
+                }
+            ],
+
+            success_url="https://sitesreports.com/payment-success?session_id={CHECKOUT_SESSION_ID}",
+
+            cancel_url="https://sitesreports.com/payment-cancel",
+
+            metadata={
+                "user_id": user.id,
+                "plan_id": plan.id,
+            },
+        )
+
+        return session
+    
+    def verify_webhook(
+        self,
+        payload,
+        signature,
+    ):
+
+        return stripe.Webhook.construct_event(
+            payload,
+            signature,
+            settings.STRIPE_WEBHOOK_SECRET,
+        )

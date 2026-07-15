@@ -21,13 +21,13 @@ from app.models.user import User
 from datetime import datetime, timezone, timedelta
 
 from app.enums.subscription import (
-    PlanType,
     SubscriptionStatus,
 )
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.login_log_repository import LoginLogRepository
 from app.repositories.otp_repository import OTPRepository
+from app.repositories.plan_repository import PlanRepository
 from app.models.subscription import Subscription
 
 from app.models.refresh_token import RefreshToken
@@ -57,6 +57,7 @@ class OTPService:
         self.otp_repo = OTPRepository(db)
         self.login_repo = LoginLogRepository(db)
         self.subscription_repo = SubscriptionRepository(db)
+        self.plan_repo = PlanRepository(db)
         self.refresh_repo = RefreshTokenRepository(db)
         self.email_service = email_service
 
@@ -183,12 +184,15 @@ class OTPService:
 
             await self.db.flush()
 
+            trial_plan = await self.plan_repo.get_trial_plan()
+
             subscription = Subscription(
                 user_id=user.id,
-                plan_type=PlanType.TRIAL,
+                plan_id=trial_plan.id,
                 status=SubscriptionStatus.ACTIVE,
-                report_limit=5,
-                start_date=datetime.now(timezone.utc),
+                start_date=datetime.now(
+                    timezone.utc,
+                ),
             )
 
             self.subscription_repo.create(subscription)

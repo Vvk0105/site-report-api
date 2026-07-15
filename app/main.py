@@ -15,7 +15,9 @@ from app.startup.seed import seed_admin
 from app.core.exceptions import (
     register_exception_handlers,
 )
-
+from app.api.v1.payment import (
+    router as payment_router,
+)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
@@ -49,6 +51,7 @@ app.include_router(subscription_router)
 app.include_router(admin_router)
 app.include_router(system_router)
 app.include_router(admin_plan_router)
+app.include_router(payment_router)
 
 @app.get("/")
 def read_root():

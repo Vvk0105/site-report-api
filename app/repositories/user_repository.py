@@ -118,7 +118,7 @@ class UserRepository:
         if plan:
 
             filters.append(
-                Subscription.plan_type == plan
+                Subscription.plan.name == plan
             )
 
         if status is not None:

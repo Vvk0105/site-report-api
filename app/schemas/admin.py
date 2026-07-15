@@ -104,9 +104,7 @@ class UpdateUserRequest(BaseModel):
 
 class UpdateSubscriptionRequest(BaseModel):
 
-    plan_type: str
-
-    report_limit: int
+    plan_id: int
 
     status: str
 

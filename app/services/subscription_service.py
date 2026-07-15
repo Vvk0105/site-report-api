@@ -1,6 +1,5 @@
 from fastapi import HTTPException
 
-from app.enums.subscription import PlanType
 from app.enums.subscription import SubscriptionStatus
 from app.repositories.subscription_repository import SubscriptionRepository
 from app.repositories.report_repository import ReportRepository
@@ -36,18 +35,18 @@ class SubscriptionService:
             user_id
         )
 
-        if subscription.report_limit == -1:
+        if subscription.plan.report_limit == -1:
             reports_remaining = -1
         else:
             reports_remaining = max(
                 0,
-                subscription.report_limit - reports_used,
+                subscription.plan.report_limit - reports_used,
             )
 
         return {
-            "plan_type": subscription.plan_type.value,
+            "plan_type": subscription.plan.name,
             "status": subscription.status.value,
-            "report_limit": subscription.report_limit,
+            "report_limit": subscription.plan.report_limit,
             "reports_used": reports_used,
             "reports_remaining": reports_remaining,
         }
@@ -73,14 +72,14 @@ class SubscriptionService:
                 detail="Subscription expired",
             )
 
-        if subscription.plan_type == PlanType.YEARLY:
+        if subscription.plan.report_limit == -1:
             return
 
         reports_used = await self.report_repo.completed_count(
             user_id
         )
 
-        if reports_used >= subscription.report_limit:
+        if reports_used >= subscription.plan.report_limit:
             raise HTTPException(
                 status_code=403,
                 detail="Trial report limit reached",
@@ -103,9 +102,9 @@ class SubscriptionService:
                     "id": subscription.id,
                     "user_id": user.id,
                     "email": user.email,
-                    "plan_type": subscription.plan_type.value,
+                    "plan_type": subscription.plan.name,
                     "status": subscription.status.value,
-                    "report_limit": subscription.report_limit,
+                    "report_limit": subscription.plan.report_limit,
                     "start_date": subscription.start_date,
                     "end_date": subscription.end_date,
                 }
@@ -116,8 +115,7 @@ class SubscriptionService:
     async def admin_update(
         self,
         user_id: int,
-        plan_type: str,
-        report_limit: int,
+        plan_id: int,
         status: str,
         end_date,
     ):
@@ -133,15 +131,11 @@ class SubscriptionService:
                 detail="Subscription not found",
             )
 
-        subscription.plan_type = PlanType(
-            plan_type
-        )
+        subscription.plan_id = plan_id
 
         subscription.status = SubscriptionStatus(
             status
         )
-
-        subscription.report_limit = report_limit
 
         subscription.end_date = end_date
 
@@ -151,6 +145,8 @@ class SubscriptionService:
 
         await self.db.commit()
 
+        await self.db.refresh(subscription)
+
         return {
             "id": subscription.id,
             "user_id": subscription.user_id,
@@ -159,9 +155,9 @@ class SubscriptionService:
                     user_id
                 )
             ).email,
-            "plan_type": subscription.plan_type.value,
+            "plan_type": subscription.plan.name,
             "status": subscription.status.value,
-            "report_limit": subscription.report_limit,
+            "report_limit": subscription.plan.report_limit,
             "start_date": subscription.start_date,
             "end_date": subscription.end_date,
         }

@@ -9,3 +9,4 @@ class PlanType(str, Enum):
 class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
+    CANCELLED = "cancelled"

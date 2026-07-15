@@ -3,11 +3,11 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy import select
 
-from app.enums.subscription import PlanType
 from app.enums.subscription import SubscriptionStatus
 from app.enums.report import ReportStatus
 
 from app.models.user import User
+from app.models.plan import Plan
 from app.models.report import Report
 from app.models.subscription import Subscription
 
@@ -36,8 +36,10 @@ class DashboardRepository:
     async def trial_users(self):
 
         result = await self.db.execute(
-            select(func.count(Subscription.id)).where(
-                Subscription.plan_type == PlanType.TRIAL,
+            select(func.count(Subscription.id)).join(
+                Plan, Subscription.plan_id == Plan.id
+            ).where(
+                Plan.is_trial == True,
                 Subscription.status == SubscriptionStatus.ACTIVE,
             )
         )
@@ -47,8 +49,10 @@ class DashboardRepository:
     async def paid_users(self):
 
         result = await self.db.execute(
-            select(func.count(Subscription.id)).where(
-                Subscription.plan_type == PlanType.YEARLY,
+            select(func.count(Subscription.id)).join(
+                Plan, Subscription.plan_id == Plan.id
+            ).where(
+                Plan.is_trial == False,
                 Subscription.status == SubscriptionStatus.ACTIVE,
             )
         )

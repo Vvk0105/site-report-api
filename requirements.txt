@@ -13,3 +13,4 @@ aiosmtplib
 email-validator
 asyncpg
 fastapi-mail
+stripe==13.*

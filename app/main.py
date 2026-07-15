@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from app.api.v1.subscription import router as subscription_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.system import router as system_router
-
+from app.api.v1.admin_plan import router as admin_plan_router
 from app.db.database import SessionLocal
 from app.startup.seed import seed_admin
 
@@ -48,6 +48,7 @@ app.include_router(report_router)
 app.include_router(subscription_router)
 app.include_router(admin_router)
 app.include_router(system_router)
+app.include_router(admin_plan_router)
 
 @app.get("/")
 def read_root():

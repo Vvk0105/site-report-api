@@ -42,3 +42,33 @@ class PlanRepository:
     ):
 
         self.db.add(plan)
+
+    
+    async def list(
+        self,
+    ):
+
+        result = await self.db.execute(
+            select(Plan)
+            .order_by(
+                Plan.created_at.desc(),
+            )
+        )
+
+        return result.scalars().all()
+
+
+    def update(
+        self,
+        plan,
+    ):
+
+        self.db.add(plan)
+
+
+    async def delete(
+        self,
+        plan,
+    ):
+
+        await self.db.delete(plan)

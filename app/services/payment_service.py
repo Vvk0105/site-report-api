@@ -79,8 +79,8 @@ class PaymentService:
     
     async def webhook(
         self,
-        payload,
-        signature,
+        payload: bytes,
+        signature: str,
     ):
 
         event = self.stripe.verify_webhook(
@@ -89,7 +89,6 @@ class PaymentService:
         )
 
         if event["type"] != "checkout.session.completed":
-
             return {
                 "received": True,
             }
@@ -114,26 +113,17 @@ class PaymentService:
         )
 
         payment = Payment(
-
             user_id=user_id,
-
             plan_id=plan_id,
-
             stripe_customer_id=session["customer"],
-
             stripe_session_id=session["id"],
-
             stripe_subscription_id=session["subscription"],
-
             stripe_payment_intent=session.get(
                 "payment_intent"
             ),
-
             amount=session["amount_total"] / 100,
-
             currency=session["currency"].upper(),
-
-            status="paid",
+            status=PaymentStatus.PAID,
         )
 
         self.payment_repo.create(
@@ -141,17 +131,14 @@ class PaymentService:
         )
 
         subscription = await self.subscription_repo.get_by_user_id(
-            user_id
+            user_id,
         )
 
         subscription.plan_id = plan_id
-
         subscription.status = SubscriptionStatus.ACTIVE
-
         subscription.start_date = datetime.now(
             timezone.utc,
         )
-
         subscription.end_date = None
 
         await self.db.commit()

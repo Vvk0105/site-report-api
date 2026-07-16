@@ -22,14 +22,24 @@ class StripeService:
             description=description,
         )
 
-        stripe_price = stripe.Price.create(
-            product=product.id,
-            unit_amount=int(price * 100),
-            currency=currency.lower(),
-            recurring={
-                "interval": billing_cycle,
-            },
-        )
+        interval_map = {
+            "monthly": "month",
+            "yearly": "year",
+            "weekly": "week",
+            "daily": "day",
+        }
+        
+        price_kwargs = {
+            "product": product.id,
+            "unit_amount": int(price * 100),
+            "currency": currency.lower(),
+        }
+        
+        if billing_cycle != "lifetime":
+            interval = interval_map.get(billing_cycle, billing_cycle)
+            price_kwargs["recurring"] = {"interval": interval}
+
+        stripe_price = stripe.Price.create(**price_kwargs)
 
         return (
             product.id,

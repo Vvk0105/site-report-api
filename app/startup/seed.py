@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.core.config import settings
 from app.core.security import hash_password
-
+from datetime import datetime, timezone
 
 async def seed_admin(db: AsyncSession):
 
@@ -24,8 +24,10 @@ async def seed_admin(db: AsyncSession):
         password_hash=hash_password(settings.ADMIN_PASSWORD),
         is_admin=True,
         is_active=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
-
+    
     db.add(admin)
 
     await db.commit()

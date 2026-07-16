@@ -52,6 +52,21 @@ class PaymentService:
                 "Plan is inactive",
             )
 
+        if not user.stripe_customer_id:
+
+            customer = self.stripe.create_customer(
+                email=user.email,
+                name=user.full_name,
+            )
+
+            user.stripe_customer_id = customer.id
+
+            self.user_repo.update(
+                user,
+            )
+
+            await self.db.commit()
+
         session = self.stripe.create_checkout_session(
             plan=plan,
             user=user,

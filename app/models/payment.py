@@ -8,7 +8,9 @@ from sqlalchemy.orm import mapped_column
 from app.db.database import Base
 from app.models.base import TimestampMixin
 from sqlalchemy.orm import relationship
+from sqlalchemy import Enum
 
+from app.enums.payment import PaymentStatus
 class Payment(
     Base,
     TimestampMixin,
@@ -53,8 +55,8 @@ class Payment(
         String(10),
     )
 
-    status: Mapped[str] = mapped_column(
-        String(30),
+    status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus),
     )
 
     user = relationship(

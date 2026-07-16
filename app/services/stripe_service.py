@@ -47,7 +47,7 @@ class StripeService:
 
             mode="subscription",
 
-            customer_email=user.email,
+            customer=user.stripe_customer_id,
 
             line_items=[
                 {
@@ -79,3 +79,17 @@ class StripeService:
             signature,
             settings.STRIPE_WEBHOOK_SECRET,
         )
+    
+    def create_customer(
+        self,
+        *,
+        email: str,
+        name: str | None,
+    ):
+
+        customer = stripe.Customer.create(
+            email=email,
+            name=name,
+        )
+
+        return customer

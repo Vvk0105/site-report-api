@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models.subscription import Subscription
 
@@ -11,7 +12,9 @@ class SubscriptionRepository:
     async def get_by_user_id(self, user_id: int):
 
         result = await self.db.execute(
-            select(Subscription).where(
+            select(Subscription)
+            .options(selectinload(Subscription.plan))
+            .where(
                 Subscription.user_id == user_id
             )
         )
@@ -28,6 +31,7 @@ class SubscriptionRepository:
 
         result = await self.db.execute(
             select(Subscription)
+            .options(selectinload(Subscription.plan))
             .order_by(
                 Subscription.start_date.desc()
             )

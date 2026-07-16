@@ -58,3 +58,17 @@ async def webhook(
         payload,
         stripe_signature,
     )
+
+@router.get(
+    "/history",
+)
+async def history(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await PaymentService(
+        db,
+    ).history(
+        current_user,
+    )

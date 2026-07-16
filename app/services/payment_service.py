@@ -5,6 +5,10 @@ from app.services.stripe_service import StripeService
 from app.models.payment import Payment
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.subscription_repository import SubscriptionRepository
+from datetime import datetime
+from datetime import timezone
+
+from app.enums.subscription import SubscriptionStatus
 
 class PaymentService:
 
@@ -82,7 +86,6 @@ class PaymentService:
         )
 
         if exists:
-
             return {
                 "received": True,
             }
@@ -101,15 +104,19 @@ class PaymentService:
 
             plan_id=plan_id,
 
-            stripe_session_id=session["id"],
-
             stripe_customer_id=session["customer"],
+
+            stripe_session_id=session["id"],
 
             stripe_subscription_id=session["subscription"],
 
+            stripe_payment_intent=session.get(
+                "payment_intent"
+            ),
+
             amount=session["amount_total"] / 100,
 
-            currency=session["currency"],
+            currency=session["currency"].upper(),
 
             status="paid",
         )
@@ -119,13 +126,58 @@ class PaymentService:
         )
 
         subscription = await self.subscription_repo.get_by_user_id(
-            user_id,
+            user_id
         )
 
         subscription.plan_id = plan_id
+
+        subscription.status = SubscriptionStatus.ACTIVE
+
+        subscription.start_date = datetime.now(
+            timezone.utc,
+        )
+
+        subscription.end_date = None
 
         await self.db.commit()
 
         return {
             "received": True,
         }
+    
+    async def history(
+        self,
+        user,
+    ):
+
+        payments = await self.payment_repo.history(
+            user.id,
+        )
+
+        return payments
+    
+    async def admin_payments(
+        self,
+    ):
+
+        payments = await self.payment_repo.admin_list()
+
+        data = []
+
+        for payment in payments:
+
+            data.append(
+                {
+                    "id": payment.id,
+                    "user_id": payment.user_id,
+                    "user_email": payment.user.email,
+                    "plan": payment.plan.name,
+                    "amount": float(payment.amount),
+                    "currency": payment.currency,
+                    "status": payment.status,
+                    "stripe_session_id": payment.stripe_session_id,
+                    "created_at": payment.created_at,
+                }
+            )
+
+        return data

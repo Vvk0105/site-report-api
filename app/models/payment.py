@@ -7,7 +7,7 @@ from sqlalchemy.orm import mapped_column
 
 from app.db.database import Base
 from app.models.base import TimestampMixin
-
+from sqlalchemy.orm import relationship
 
 class Payment(
     Base,
@@ -16,16 +16,19 @@ class Payment(
 
     __tablename__ = "payments"
 
-    id: Mapped[int] = mapped_column(
-        primary_key=True,
-    )
+    id: Mapped[int] = mapped_column(primary_key=True)
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
+        index=True,
     )
 
     plan_id: Mapped[int] = mapped_column(
         ForeignKey("plans.id"),
+    )
+
+    stripe_customer_id: Mapped[str] = mapped_column(
+        String(255),
     )
 
     stripe_session_id: Mapped[str] = mapped_column(
@@ -33,12 +36,13 @@ class Payment(
         unique=True,
     )
 
-    stripe_customer_id: Mapped[str] = mapped_column(
+    stripe_subscription_id: Mapped[str] = mapped_column(
         String(255),
     )
 
-    stripe_subscription_id: Mapped[str] = mapped_column(
+    stripe_payment_intent: Mapped[str | None] = mapped_column(
         String(255),
+        nullable=True,
     )
 
     amount: Mapped[float] = mapped_column(
@@ -51,4 +55,12 @@ class Payment(
 
     status: Mapped[str] = mapped_column(
         String(30),
+    )
+
+    user = relationship(
+        "User",
+    )
+
+    plan = relationship(
+        "Plan",
     )

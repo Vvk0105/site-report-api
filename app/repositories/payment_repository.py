@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.models.payment import Payment
 
@@ -29,3 +30,42 @@ class PaymentRepository:
         )
 
         return result.scalar_one_or_none()
+    
+    async def history(
+        self,
+        user_id: int,
+    ):
+
+        result = await self.db.execute(
+
+            select(Payment)
+            .options(
+                selectinload(Payment.user),
+                selectinload(Payment.plan),
+            )
+            .where(
+                Payment.user_id == user_id,
+            )
+
+            .order_by(
+                Payment.created_at.desc(),
+            )
+        )
+
+        return result.scalars().all()
+    
+    async def admin_list(self):
+
+        result = await self.db.execute(
+
+            select(Payment)
+            .options(
+                selectinload(Payment.user),
+                selectinload(Payment.plan),
+            )
+            .order_by(
+                Payment.created_at.desc(),
+            )
+        )
+
+        return result.scalars().all()

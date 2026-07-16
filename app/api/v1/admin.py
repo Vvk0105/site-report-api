@@ -42,6 +42,8 @@ from app.services.login_log_service import (
     LoginLogService,
 )
 
+from app.services.payment_service import PaymentService
+
 router = APIRouter(
     prefix='/admin',
     tags=["Admin"],
@@ -297,3 +299,15 @@ async def login_logs(
         sort=sort,
         order=order,
     )
+
+@router.get(
+    "/payments",
+)
+async def payments(
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await PaymentService(
+        db,
+    ).admin_payments()

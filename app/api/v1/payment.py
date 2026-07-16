@@ -72,3 +72,18 @@ async def history(
     ).history(
         current_user,
     )
+
+@router.get(
+    "/{session_id}",
+)
+async def verify_payment(
+    session_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await PaymentService(
+        db,
+    ).verify(
+        session_id,
+    )

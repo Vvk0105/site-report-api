@@ -9,7 +9,7 @@ from datetime import datetime
 from datetime import timezone
 
 from app.enums.subscription import SubscriptionStatus
-
+from app.enums.payment import PaymentStatus
 class PaymentService:
 
     def __init__(
@@ -196,3 +196,28 @@ class PaymentService:
             )
 
         return data
+    
+    async def verify(
+        self,
+        session_id: str,
+    ):
+
+        payment = await self.payment_repo.get_by_session(
+            session_id,
+        )
+
+        if not payment:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Payment not found",
+            )
+
+        return {
+            "paid": payment.status == PaymentStatus.PAID,
+            "status": payment.status.value,
+            "amount": float(payment.amount),
+            "currency": payment.currency,
+            "plan": payment.plan.name,
+            "payment_date": payment.created_at,
+        }

@@ -40,9 +40,48 @@ def upgrade():
     )
 
     # 3. Set all existing subscriptions to Trial plan
-    op.execute(
-        "UPDATE subscriptions SET plan_id = 1"
+    op.execute("""
+    INSERT INTO plans (
+        name,
+        description,
+        price,
+        currency,
+        billing_cycle,
+        report_limit,
+        trial_days,
+        is_trial,
+        is_active,
+        created_at,
+        updated_at
     )
+    SELECT
+        'Trial',
+        'Free Trial',
+        0,
+        'USD',
+        'year',
+        5,
+        30,
+        TRUE,
+        TRUE,
+        NOW(),
+        NOW()
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM plans
+        WHERE is_trial = TRUE
+    );
+    """)
+
+    op.execute("""
+    UPDATE subscriptions
+    SET plan_id = (
+        SELECT id
+        FROM plans
+        WHERE is_trial = TRUE
+        LIMIT 1
+    );
+    """)
 
     # 4. Make plan_id mandatory
     op.alter_column(

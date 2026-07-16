@@ -10,6 +10,8 @@ from app.models.user import User
 from app.models.plan import Plan
 from app.models.report import Report
 from app.models.subscription import Subscription
+from app.models.payment import Payment
+from app.enums.payment import PaymentStatus
 
 class DashboardRepository:
 
@@ -101,3 +103,13 @@ class DashboardRepository:
         )
 
         return result.scalar_one()
+
+    async def revenue_data(self, start_date: datetime, end_date: datetime):
+        result = await self.db.execute(
+            select(Payment).where(
+                Payment.status == PaymentStatus.PAID,
+                Payment.created_at >= start_date,
+                Payment.created_at <= end_date,
+            ).order_by(Payment.created_at.asc())
+        )
+        return result.scalars().all()

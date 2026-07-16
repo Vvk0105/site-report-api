@@ -197,3 +197,10 @@ class LoginLogListResponse(BaseModel):
     has_previous: bool
 
     results: list[LoginLogResponse]
+
+class RevenueChartData(BaseModel):
+    date: str
+    revenue: float
+
+class RevenueChartResponse(BaseModel):
+    data: list[RevenueChartData]

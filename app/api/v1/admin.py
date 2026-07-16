@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from app.db.database import get_db
 
-from app.schemas.admin import DashboardResponse
+from app.schemas.admin import DashboardResponse, RevenueChartResponse
 
 from app.services.dashboard_service import DashboardService
 
@@ -70,8 +70,21 @@ async def dashboard(
 ):
 
     service = DashboardService(db)
-
     return await service.dashboard()
+
+@router.get(
+    "/dashboard/revenue",
+    response_model=RevenueChartResponse,
+)
+async def dashboard_revenue(
+    interval: str = Query("daily", regex="^(daily|weekly|monthly|yearly)$"),
+    start_date: datetime = Query(...),
+    end_date: datetime = Query(...),
+    admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    service = DashboardService(db)
+    return await service.revenue_chart(interval, start_date, end_date)
 
 @router.get(
     "/users",

@@ -88,60 +88,107 @@ class PaymentService:
             signature,
         )
 
-        if event["type"] != "checkout.session.completed":
-            return {
-                "received": True,
-            }
+        event_type = event["type"]
 
-        session = event["data"]["object"]
+        data = event["data"]["object"]
 
-        exists = await self.payment_repo.get_by_session(
-            session["id"],
-        )
+        if event_type == "checkout.session.completed":
 
-        if exists:
-            return {
-                "received": True,
-            }
+            exists = await self.payment_repo.get_by_session(
+                data["id"],
+            )
 
-        user_id = int(
-            session["metadata"]["user_id"]
-        )
+            if exists:
+                return {
+                    "received": True,
+                }
 
-        plan_id = int(
-            session["metadata"]["plan_id"]
-        )
+            user_id = int(
+                data["metadata"]["user_id"]
+            )
 
-        payment = Payment(
-            user_id=user_id,
-            plan_id=plan_id,
-            stripe_customer_id=session["customer"],
-            stripe_session_id=session["id"],
-            stripe_subscription_id=session["subscription"],
-            stripe_payment_intent=session.get(
-                "payment_intent"
-            ),
-            amount=session["amount_total"] / 100,
-            currency=session["currency"].upper(),
-            status=PaymentStatus.PAID,
-        )
+            plan_id = int(
+                data["metadata"]["plan_id"]
+            )
 
-        self.payment_repo.create(
-            payment,
-        )
+            payment = Payment(
+                user_id=user_id,
+                plan_id=plan_id,
+                stripe_customer_id=data["customer"],
+                stripe_session_id=data["id"],
+                stripe_subscription_id=data["subscription"],
+                stripe_payment_intent=data.get(
+                    "payment_intent"
+                ),
+                amount=data["amount_total"] / 100,
+                currency=data["currency"].upper(),
+                status=PaymentStatus.PAID,
+            )
 
-        subscription = await self.subscription_repo.get_by_user_id(
-            user_id,
-        )
+            self.payment_repo.create(
+                payment,
+            )
 
-        subscription.plan_id = plan_id
-        subscription.status = SubscriptionStatus.ACTIVE
-        subscription.start_date = datetime.now(
-            timezone.utc,
-        )
-        subscription.end_date = None
+            subscription = await self.subscription_repo.get_by_user_id(
+                user_id,
+            )
 
-        await self.db.commit()
+            subscription.plan_id = plan_id
+            subscription.status = SubscriptionStatus.ACTIVE
+            subscription.start_date = datetime.now(
+                timezone.utc,
+            )
+
+            await self.db.commit()
+
+        elif event_type == "customer.subscription.deleted":
+
+            stripe_subscription = data["id"]
+
+            payment = await self.payment_repo.get_by_subscription(
+                stripe_subscription,
+            )
+
+            if payment:
+
+                subscription = await self.subscription_repo.get_by_user_id(
+                    payment.user_id,
+                )
+
+                subscription.status = SubscriptionStatus.CANCELLED
+
+                await self.db.commit()
+
+        elif event_type == "customer.subscription.updated":
+
+            stripe_subscription = data["id"]
+
+            payment = await self.payment_repo.get_by_subscription(
+                stripe_subscription,
+            )
+
+            if payment:
+
+                subscription = await self.subscription_repo.get_by_user_id(
+                    payment.user_id,
+                )
+
+                subscription.status = SubscriptionStatus.ACTIVE
+
+                if data.get(
+                    "current_period_end"
+                ):
+
+                    subscription.end_date = datetime.fromtimestamp(
+                        data["current_period_end"],
+                        tz=timezone.utc,
+                    )
+
+                await self.db.commit()
+
+        elif event_type == "invoice.paid":
+
+            pass
 
         return {
             "received": True,
@@ -207,4 +254,22 @@ class PaymentService:
             "currency": payment.currency,
             "plan": payment.plan.name,
             "payment_date": payment.created_at,
+        }
+    
+    async def customer_portal(
+        self,
+        user,
+    ):
+
+        if not user.stripe_customer_id:
+
+            raise HTTPException(
+                400,
+                "Customer not found",
+            )
+
+        return {
+            "url": self.stripe.create_customer_portal(
+                user.stripe_customer_id,
+            )
         }

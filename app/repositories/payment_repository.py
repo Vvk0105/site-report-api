@@ -69,3 +69,18 @@ class PaymentRepository:
         )
 
         return result.scalars().all()
+    
+
+    async def get_by_subscription(
+        self,
+        stripe_subscription_id: str,
+    ):
+
+        result = await self.db.execute(
+            select(Payment).where(
+                Payment.stripe_subscription_id
+                == stripe_subscription_id
+            )
+        )
+
+        return result.scalar_one_or_none()

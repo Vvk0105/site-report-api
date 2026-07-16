@@ -87,3 +87,17 @@ async def verify_payment(
     ).verify(
         session_id,
     )
+
+@router.get(
+    "/customer-portal",
+)
+async def customer_portal(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+
+    return await PaymentService(
+        db,
+    ).customer_portal(
+        current_user,
+    )

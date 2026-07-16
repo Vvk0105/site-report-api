@@ -70,8 +70,8 @@ class StripeService:
     
     def verify_webhook(
         self,
-        payload,
-        signature,
+        payload: bytes,
+        signature: str,
     ):
 
         return stripe.Webhook.construct_event(
@@ -93,3 +93,17 @@ class StripeService:
         )
 
         return customer
+    
+    def create_customer_portal(
+        self,
+        customer_id: str,
+    ):
+
+        session = stripe.billing_portal.Session.create(
+
+            customer=customer_id,
+
+            return_url="https://sitesreports.com/profile",
+        )
+
+        return session.url

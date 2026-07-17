@@ -78,7 +78,6 @@ async def history(
 )
 async def verify_payment(
     session_id: str,
-    current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
 

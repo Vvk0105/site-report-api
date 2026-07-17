@@ -24,7 +24,9 @@ class PaymentRepository:
     ):
 
         result = await self.db.execute(
-            select(Payment).where(
+            select(Payment)
+            .options(selectinload(Payment.plan))
+            .where(
                 Payment.stripe_session_id == session_id,
             )
         )

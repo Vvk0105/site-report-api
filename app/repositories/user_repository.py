@@ -7,8 +7,11 @@ from sqlalchemy import or_
 
 from app.models.subscription import Subscription
 from app.models.report import Report
+from app.models.plan import Plan
 from app.enums.report import ReportStatus
 from sqlalchemy import and_, asc, desc
+from sqlalchemy.orm import selectinload
+
 class UserRepository:
 
     def __init__(self, db: AsyncSession):
@@ -98,6 +101,13 @@ class UserRepository:
                 report_count,
                 report_count.c.user_id == User.id,
             )
+            .outerjoin(
+                Plan,
+                Plan.id == Subscription.plan_id,
+            )
+            .options(
+                selectinload(Subscription.plan)
+            )
         )
 
         filters = []
@@ -118,7 +128,7 @@ class UserRepository:
         if plan:
 
             filters.append(
-                Subscription.plan.name == plan
+                Plan.name == plan
             )
 
         if status is not None:

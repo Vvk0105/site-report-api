@@ -66,9 +66,9 @@ class StripeService:
                 }
             ],
 
-            success_url="https://sitesreports.com/payment-success?session_id={CHECKOUT_SESSION_ID}",
+            success_url="https://admin.sitesreports.com/payment-success?session_id={CHECKOUT_SESSION_ID}",
 
-            cancel_url="https://sitesreports.com/payment-cancel",
+            cancel_url="https://admin.sitesreports.com/payment-cancel",
 
             metadata={
                 "user_id": user.id,

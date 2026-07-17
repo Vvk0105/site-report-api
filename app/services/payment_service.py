@@ -5,6 +5,7 @@ from app.services.stripe_service import StripeService
 from app.models.payment import Payment
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.subscription_repository import SubscriptionRepository
+from app.repositories.user_repository import UserRepository
 from datetime import datetime
 from datetime import timezone
 
@@ -26,6 +27,8 @@ class PaymentService:
         self.payment_repo = PaymentRepository(db)
 
         self.subscription_repo = SubscriptionRepository(db)
+
+        self.user_repo = UserRepository(db)
 
     async def checkout(
         self,

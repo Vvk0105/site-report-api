@@ -214,7 +214,8 @@ class UserRepository:
         user: User,
     ):
 
-        await self.db.delete(user)
+        user.is_active = False
+        self.db.add(user)
 
     def update(
         self,

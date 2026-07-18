@@ -177,6 +177,7 @@ async def update_user(
 )
 async def delete_user(
     user_id: int,
+    hard: bool = False,
     admin=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -185,6 +186,7 @@ async def delete_user(
         db,
     ).delete_user(
         user_id,
+        hard=hard,
     )
 
 @router.get(

@@ -217,6 +217,12 @@ class UserRepository:
         user.is_active = False
         self.db.add(user)
 
+    async def hard_delete(
+        self,
+        user: User,
+    ):
+        await self.db.delete(user)
+
     def update(
         self,
         user: User,

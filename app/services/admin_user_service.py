@@ -5,6 +5,12 @@ from app.repositories.plan_repository import PlanRepository
 
 from app.models.user import User
 from app.models.subscription import Subscription
+from app.models.login_log import LoginLog
+from app.models.otp import OTPCode
+from app.models.payment import Payment
+from app.models.refresh_token import RefreshToken
+from app.models.report import Report
+from sqlalchemy import delete
 
 from app.enums.subscription import (
     SubscriptionStatus,
@@ -240,6 +246,7 @@ class AdminUserService:
     async def delete_user(
         self,
         user_id: int,
+        hard: bool = False,
     ):
 
         user = await self.user_repo.get_by_id(
@@ -258,9 +265,17 @@ class AdminUserService:
                 detail="Cannot delete admin",
             )
 
-        await self.user_repo.delete(
-            user,
-        )
+        if hard:
+            await self.db.execute(delete(LoginLog).where(LoginLog.user_id == user.id))
+            await self.db.execute(delete(OTPCode).where(OTPCode.email == user.email))
+            await self.db.execute(delete(Payment).where(Payment.user_id == user.id))
+            await self.db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+            await self.db.execute(delete(Report).where(Report.user_id == user.id))
+            await self.db.execute(delete(Subscription).where(Subscription.user_id == user.id))
+            
+            await self.user_repo.hard_delete(user)
+        else:
+            await self.user_repo.delete(user)
 
         await self.db.commit()
 

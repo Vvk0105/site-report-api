@@ -33,6 +33,8 @@ class Settings(BaseSettings):
 
     STRIPE_WEBHOOK_SECRET: str
 
+    APPLE_SHARED_SECRET: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

@@ -1,3 +1,5 @@
+import httpx
+
 from fastapi import HTTPException
 
 from app.repositories.plan_repository import PlanRepository
@@ -276,3 +278,144 @@ class PaymentService:
                 user.stripe_customer_id,
             )
         }
+
+    async def verify_apple_receipt(
+        self,
+        receipt_data: str,
+        user,
+    ):
+        from app.core.config import settings
+
+        payload = {
+            "receipt-data": receipt_data,
+            "password": settings.APPLE_SHARED_SECRET,
+            "exclude-old-transactions": True,
+        }
+
+        # Always try production first
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://buy.itunes.apple.com/verifyReceipt",
+                json=payload,
+            )
+            result = resp.json()
+
+        # Status 21007 = sandbox receipt sent to production → retry sandbox
+        if result.get("status") == 21007:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    "https://sandbox.itunes.apple.com/verifyReceipt",
+                    json=payload,
+                )
+                result = resp.json()
+
+        if result.get("status") != 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Apple receipt verification failed: status {result.get('status')}",
+            )
+
+        latest_list = result.get("latest_receipt_info", [])
+        if not latest_list:
+            raise HTTPException(
+                status_code=400,
+                detail="No receipt info found",
+            )
+
+        # Use the most recent transaction
+        latest = latest_list[-1]
+        product_id = latest.get("product_id")
+
+        # Find the matching plan in DB
+        plan = await self.plan_repo.get_by_apple_product_id(product_id)
+        if not plan:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active plan found for Apple product: {product_id}",
+            )
+
+        # Parse subscription end date from Apple's epoch-ms timestamp
+        expires_ms = latest.get("expires_date_ms")
+        end_date = None
+        if expires_ms:
+            end_date = datetime.fromtimestamp(
+                int(expires_ms) / 1000,
+                tz=timezone.utc,
+            )
+
+        transaction_id = latest.get("transaction_id", "")
+        original_transaction_id = latest.get(
+            "original_transaction_id", transaction_id
+        )
+
+        # Avoid duplicate payment records
+        existing = await self.payment_repo.get_by_session(transaction_id)
+        if not existing:
+            payment = Payment(
+                user_id=user.id,
+                plan_id=plan.id,
+                stripe_customer_id="apple_iap",
+                stripe_session_id=transaction_id,
+                stripe_subscription_id=original_transaction_id,
+                amount=float(plan.price),
+                currency="USD",
+                status=PaymentStatus.PAID,
+            )
+            self.payment_repo.create(payment)
+
+        # Upgrade the user's subscription
+        subscription = await self.subscription_repo.get_by_user_id(user.id)
+        subscription.plan_id = plan.id
+        subscription.status = SubscriptionStatus.ACTIVE
+        subscription.start_date = datetime.now(timezone.utc)
+        subscription.end_date = end_date
+
+        await self.db.commit()
+
+        return {
+            "success": True,
+            "plan": plan.name,
+            "expires_at": end_date.isoformat() if end_date else None,
+        }
+
+    async def handle_apple_webhook(
+        self,
+        payload: dict,
+    ):
+        from app.core.config import settings
+
+        notification_type = payload.get(
+            "notificationType"
+        ) or payload.get("notification_type", "")
+
+        # Subscription expired or cancelled → downgrade to Free Plan
+        if notification_type in (
+            "DID_FAIL_TO_RENEW",
+            "EXPIRED",
+            "REVOKE",
+            "CANCEL",
+        ):
+            data = payload.get("data", {})
+            original_transaction_id = data.get(
+                "originalTransactionId"
+            ) or payload.get("original_transaction_id")
+
+            if original_transaction_id:
+                payment = await self.payment_repo.get_by_subscription(
+                    original_transaction_id
+                )
+                if payment:
+                    subscription = (
+                        await self.subscription_repo.get_by_user_id(
+                            payment.user_id
+                        )
+                    )
+                    if subscription:
+                        free_plan = await self.plan_repo.get_trial_plan()
+                        if free_plan:
+                            subscription.plan_id = free_plan.id
+                        subscription.status = SubscriptionStatus.CANCELLED
+                        subscription.end_date = datetime.now(timezone.utc)
+                        await self.db.commit()
+
+        return {"received": True}

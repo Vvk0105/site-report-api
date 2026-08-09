@@ -94,3 +94,17 @@ class PlanRepository:
         )
 
         return result.scalar_one_or_none()
+
+    async def get_by_apple_product_id(
+        self,
+        apple_product_id: str,
+    ):
+
+        result = await self.db.execute(
+            select(Plan).where(
+                Plan.apple_product_id == apple_product_id,
+                Plan.is_active == True,
+            )
+        )
+
+        return result.scalar_one_or_none()

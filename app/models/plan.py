@@ -67,3 +67,8 @@ class Plan(
         String(255),
         nullable=True,
     )
+
+    apple_product_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )

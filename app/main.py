@@ -11,7 +11,7 @@ from app.api.v1.system import router as system_router
 from app.api.v1.admin_plan import router as admin_plan_router
 from app.api.v1.plan import router as plan_router
 from app.db.database import SessionLocal
-from app.startup.seed import seed_admin
+from app.startup.seed import seed_admin, seed_plans
 
 from app.core.exceptions import (
     register_exception_handlers,
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
 
     async with SessionLocal() as db:
         await seed_admin(db)
+        await seed_plans(db)
 
     yield
 

@@ -76,24 +76,18 @@ class PlanRepository:
     async def get_trial_plan(self):
 
         result = await self.db.execute(
-            select(Plan).where(
+            select(Plan)
+            .where(
                 Plan.is_trial == True,
                 Plan.is_active == True,
             )
-        )
-
-        return result.scalar_one_or_none()
-
-    async def get_trial_plan(self):
-
-        result = await self.db.execute(
-            select(Plan).where(
-                Plan.is_trial == True,
-                Plan.is_active == True,
+            .order_by(
+                Plan.id,
             )
+            .limit(1)
         )
 
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_by_apple_product_id(
         self,

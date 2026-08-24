@@ -8,6 +8,7 @@ from app.core.constants import (
     OTP_RESEND_SECONDS,
 )
 from app.core.security import hash_password
+from app.core.logger import logger
 from app.models.otp import OTPCode
 from app.core.constants import OTP_MAX_ATTEMPTS
 from app.core.security import (
@@ -195,16 +196,26 @@ class OTPService:
 
             trial_plan = await self.plan_repo.get_trial_plan()
 
-            subscription = Subscription(
-                user_id=user.id,
-                plan_id=trial_plan.id,
-                status=SubscriptionStatus.ACTIVE,
-                start_date=datetime.now(
-                    timezone.utc,
-                ),
-            )
+            if trial_plan:
 
-            self.subscription_repo.create(subscription)
+                subscription = Subscription(
+                    user_id=user.id,
+                    plan_id=trial_plan.id,
+                    status=SubscriptionStatus.ACTIVE,
+                    start_date=datetime.now(
+                        timezone.utc,
+                    ),
+                )
+
+                self.subscription_repo.create(subscription)
+
+            else:
+
+                logger.warning(
+                    "No active trial plan configured - "
+                    "user %s created without a subscription",
+                    email,
+                )
 
         self.login_repo.create(
             LoginLog(

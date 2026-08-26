@@ -3,7 +3,6 @@ from sqlalchemy import select
 from sqlalchemy import or_
 
 from app.models.report import Report
-from app.enums.report import ReportStatus
 from app.models.user import User
 
 from sqlalchemy import and_, asc, desc
@@ -40,7 +39,6 @@ class ReportRepository:
         result = await self.db.execute(
             select(func.count(Report.id)).where(
                 Report.user_id == user_id,
-                Report.status == ReportStatus.COMPLETED,
             )
         )
 

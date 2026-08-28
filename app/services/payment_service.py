@@ -1,4 +1,7 @@
 import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 
@@ -293,6 +296,8 @@ class PaymentService:
         }
 
         # Always try production first
+        logger.info("[Apple IAP] Sending receipt to PRODUCTION endpoint")
+        logger.info(f"[Apple IAP] Shared secret set: {bool(settings.APPLE_SHARED_SECRET)}")
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 "https://buy.itunes.apple.com/verifyReceipt",
@@ -300,20 +305,28 @@ class PaymentService:
             )
             result = resp.json()
 
+        apple_status = result.get("status")
+        logger.info(f"[Apple IAP] Production response status: {apple_status}")
+
         # Status 21007 = sandbox receipt sent to production → retry sandbox
-        if result.get("status") == 21007:
+        if apple_status == 21007:
+            logger.info("[Apple IAP] Sandbox receipt detected — retrying with SANDBOX endpoint")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     "https://sandbox.itunes.apple.com/verifyReceipt",
                     json=payload,
                 )
                 result = resp.json()
+            apple_status = result.get("status")
+            logger.info(f"[Apple IAP] Sandbox response status: {apple_status}")
 
-        if result.get("status") != 0:
+        if apple_status != 0:
+            logger.error(f"[Apple IAP] Verification FAILED — Apple status: {apple_status}")
             raise HTTPException(
                 status_code=400,
-                detail=f"Apple receipt verification failed: status {result.get('status')}",
+                detail=f"Apple receipt verification failed: status {apple_status}",
             )
+        logger.info("[Apple IAP] Receipt verified successfully!")
 
         latest_list = result.get("latest_receipt_info", [])
         if not latest_list:

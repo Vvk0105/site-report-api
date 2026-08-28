@@ -363,12 +363,23 @@ class PaymentService:
             )
             self.payment_repo.create(payment)
 
-        # Upgrade the user's subscription
+        # Upgrade the user's subscription (create one if it doesn't exist)
+        from app.models.subscription import Subscription
         subscription = await self.subscription_repo.get_by_user_id(user.id)
-        subscription.plan_id = plan.id
-        subscription.status = SubscriptionStatus.ACTIVE
-        subscription.start_date = datetime.now(timezone.utc)
-        subscription.end_date = end_date
+        if subscription is None:
+            subscription = Subscription(
+                user_id=user.id,
+                plan_id=plan.id,
+                status=SubscriptionStatus.ACTIVE,
+                start_date=datetime.now(timezone.utc),
+                end_date=end_date,
+            )
+            self.subscription_repo.create(subscription)
+        else:
+            subscription.plan_id = plan.id
+            subscription.status = SubscriptionStatus.ACTIVE
+            subscription.start_date = datetime.now(timezone.utc)
+            subscription.end_date = end_date
 
         await self.db.commit()
 

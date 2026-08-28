@@ -289,6 +289,9 @@ class PaymentService:
     ):
         from app.core.config import settings
 
+        # Strip whitespace — a common cause of 21002 (malformed data)
+        receipt_data = receipt_data.strip()
+
         payload = {
             "receipt-data": receipt_data,
             "password": settings.APPLE_SHARED_SECRET,
@@ -298,6 +301,7 @@ class PaymentService:
         # Always try production first
         logger.info("[Apple IAP] Sending receipt to PRODUCTION endpoint")
         logger.info(f"[Apple IAP] Shared secret set: {bool(settings.APPLE_SHARED_SECRET)}")
+        logger.info(f"[Apple IAP] Receipt data length: {len(receipt_data)}")
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 "https://buy.itunes.apple.com/verifyReceipt",
@@ -319,6 +323,15 @@ class PaymentService:
                 result = resp.json()
             apple_status = result.get("status")
             logger.info(f"[Apple IAP] Sandbox response status: {apple_status}")
+
+        if apple_status == 21002:
+            # Stale/malformed receipt — usually a stuck pending transaction replaying.
+            # Return 422 so Flutter knows to call completePurchase() and clear it.
+            logger.error("[Apple IAP] Status 21002 — stale or malformed receipt (stuck pending transaction)")
+            raise HTTPException(
+                status_code=422,
+                detail="stale_receipt",
+            )
 
         if apple_status != 0:
             logger.error(f"[Apple IAP] Verification FAILED — Apple status: {apple_status}")

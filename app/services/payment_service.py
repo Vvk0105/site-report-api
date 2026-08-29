@@ -351,9 +351,17 @@ class PaymentService:
 
         logger.info(f"[Apple IAP] Matched plan: {plan.name} (id={plan.id})")
 
-        # Avoid duplicate payment records
+        # Avoid duplicate payment records and prevent stealing subscriptions
         existing = await self.payment_repo.get_by_session(transaction_id)
-        if not existing:
+        if existing:
+            if existing.user_id != user.id:
+                logger.error(f"[Apple IAP] Transaction {transaction_id} is already claimed by user {existing.user_id} (current user: {user.id})")
+                raise HTTPException(
+                    status_code=400,
+                    detail="This Apple ID is already associated with another account.",
+                )
+            # If existing.user_id == user.id, it's just the same user restoring — let it proceed to update the subscription
+        else:
             payment = Payment(
                 user_id=user.id,
                 plan_id=plan.id,

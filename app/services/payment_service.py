@@ -308,94 +308,39 @@ class PaymentService:
         receipt_data: str,
         user,
     ):
-        from app.core.config import settings
-        import base64
-
         receipt_data = receipt_data.strip()
 
         logger.info(f"[Apple IAP] Received data length: {len(receipt_data)}")
-        logger.info(f"[Apple IAP] First 30 chars: {receipt_data[:30]}")
+        logger.info(f"[Apple IAP] First 40 chars: {receipt_data[:40]}")
 
-        # ── StoreKit 2 path: JWS signed transaction token ──────────────────────
-        # The Flutter in_app_purchase plugin on iOS 15+ returns a JWS token as
-        # serverVerificationData (contains two dots, NOT a base64 receipt).
-        if receipt_data.count('.') == 2:
-            logger.info("[Apple IAP] Detected StoreKit 2 JWS token — decoding payload")
-            try:
-                tx = self._decode_apple_jws(receipt_data)
-            except Exception as e:
-                logger.error(f"[Apple IAP] Failed to decode JWS: {e}")
-                raise HTTPException(status_code=400, detail="Invalid transaction token")
+        # Decode the StoreKit 2 JWS signed transaction token.
+        # Flutter's in_app_purchase on iOS 15+ returns this as serverVerificationData.
+        # Format: base64url(header).base64url(payload).base64url(signature)
+        logger.info("[Apple IAP] Decoding StoreKit 2 JWS token")
+        try:
+            tx = self._decode_apple_jws(receipt_data)
+        except Exception as e:
+            logger.error(f"[Apple IAP] Failed to decode JWS token: {e}")
+            raise HTTPException(status_code=400, detail="Invalid transaction token")
 
-            product_id = tx.get("productId")
-            transaction_id = tx.get("transactionId", "")
-            original_transaction_id = tx.get("originalTransactionId", transaction_id)
-            expires_ms = tx.get("expiresDate")
-            environment = tx.get("environment", "unknown")
+        product_id = tx.get("productId")
+        transaction_id = tx.get("transactionId", "")
+        original_transaction_id = tx.get("originalTransactionId", transaction_id)
+        expires_ms = tx.get("expiresDate")
+        environment = tx.get("environment", "unknown")
 
-            logger.info(f"[Apple IAP] JWS decoded — product: {product_id}, tx: {transaction_id}, env: {environment}")
+        logger.info(
+            f"[Apple IAP] JWS decoded ✓ — "
+            f"product: {product_id}, "
+            f"tx: {transaction_id}, "
+            f"env: {environment}"
+        )
 
-            end_date = None
-            if expires_ms:
-                end_date = datetime.fromtimestamp(int(expires_ms) / 1000, tz=timezone.utc)
+        end_date = None
+        if expires_ms:
+            end_date = datetime.fromtimestamp(int(expires_ms) / 1000, tz=timezone.utc)
 
-        # ── StoreKit 1 path: legacy base64 receipt ──────────────────────────────
-        else:
-            logger.info("[Apple IAP] Detected StoreKit 1 receipt — using verifyReceipt endpoint")
-            receipt_data = receipt_data.replace('\n', '').replace('\r', '').replace(' ', '')
-
-            payload = {
-                "receipt-data": receipt_data,
-                "password": settings.APPLE_SHARED_SECRET,
-                "exclude-old-transactions": True,
-            }
-
-            logger.info("[Apple IAP] Sending receipt to PRODUCTION endpoint")
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    "https://buy.itunes.apple.com/verifyReceipt",
-                    json=payload,
-                )
-                result = resp.json()
-
-            apple_status = result.get("status")
-            logger.info(f"[Apple IAP] Production response status: {apple_status}")
-
-            if apple_status in (21007, 21002):
-                logger.info(f"[Apple IAP] Status {apple_status} — retrying with SANDBOX endpoint")
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(
-                        "https://sandbox.itunes.apple.com/verifyReceipt",
-                        json=payload,
-                    )
-                    result = resp.json()
-                apple_status = result.get("status")
-                logger.info(f"[Apple IAP] Sandbox response status: {apple_status}")
-
-            if apple_status != 0:
-                logger.error(f"[Apple IAP] Verification FAILED — Apple status: {apple_status}")
-                if apple_status == 21002:
-                    raise HTTPException(status_code=422, detail="stale_receipt")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Apple receipt verification failed: status {apple_status}",
-                )
-
-            logger.info("[Apple IAP] StoreKit 1 receipt verified successfully!")
-            latest_list = result.get("latest_receipt_info", [])
-            if not latest_list:
-                raise HTTPException(status_code=400, detail="No receipt info found")
-
-            latest = latest_list[-1]
-            product_id = latest.get("product_id")
-            transaction_id = latest.get("transaction_id", "")
-            original_transaction_id = latest.get("original_transaction_id", transaction_id)
-            expires_ms = latest.get("expires_date_ms")
-            end_date = None
-            if expires_ms:
-                end_date = datetime.fromtimestamp(int(expires_ms) / 1000, tz=timezone.utc)
-
-        # ── Common: look up plan, save payment, update subscription ────────────
+        # Look up the matching plan in DB using the Apple product ID
         plan = await self.plan_repo.get_by_apple_product_id(product_id)
         if not plan:
             logger.error(f"[Apple IAP] No plan found for product_id: {product_id}")
@@ -444,7 +389,6 @@ class PaymentService:
 
         return {
             "success": True,
-
             "plan": plan.name,
             "expires_at": end_date.isoformat() if end_date else None,
         }

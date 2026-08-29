@@ -288,10 +288,19 @@ class PaymentService:
         user,
     ):
         from app.core.config import settings
+        import base64
 
         # Strip ALL whitespace including embedded newlines.
         # StoreKit sometimes wraps base64 with line breaks → Apple returns 21002.
         receipt_data = receipt_data.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+
+        # Validate it's proper base64
+        try:
+            base64.b64decode(receipt_data, validate=True)
+            logger.info(f"[Apple IAP] Receipt is valid base64 ✓ (first 20 chars: {receipt_data[:20]})")
+        except Exception as e:
+            logger.error(f"[Apple IAP] Receipt is INVALID base64: {e}")
+            raise HTTPException(status_code=400, detail="Invalid receipt format")
 
         payload = {
             "receipt-data": receipt_data,
@@ -313,26 +322,32 @@ class PaymentService:
         apple_status = result.get("status")
         logger.info(f"[Apple IAP] Production response status: {apple_status}")
 
-        # Status 21007 = sandbox receipt sent to production → retry sandbox
-        if apple_status == 21007:
-            logger.info("[Apple IAP] Sandbox receipt detected — retrying with SANDBOX endpoint")
+        # Status 21007 = sandbox receipt → retry sandbox
+        # Status 21002 from production = sometimes Apple returns this instead of 21007 for TestFlight
+        if apple_status in (21007, 21002):
+            logger.info(f"[Apple IAP] Status {apple_status} — retrying with SANDBOX endpoint")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     "https://sandbox.itunes.apple.com/verifyReceipt",
                     json=payload,
                 )
                 result = resp.json()
-            apple_status = result.get("status")
-            logger.info(f"[Apple IAP] Sandbox response status: {apple_status}")
+            sandbox_status = result.get("status")
+            logger.info(f"[Apple IAP] Sandbox response status: {sandbox_status}")
 
-        if apple_status == 21002:
-            # Stale/malformed receipt — usually a stuck pending transaction replaying.
-            # Return 422 so Flutter knows to call completePurchase() and clear it.
-            logger.error("[Apple IAP] Status 21002 — stale or malformed receipt (stuck pending transaction)")
-            raise HTTPException(
-                status_code=422,
-                detail="stale_receipt",
-            )
+            if sandbox_status == 0:
+                # Sandbox validated successfully!
+                apple_status = 0
+            elif apple_status == 21002 and sandbox_status != 0:
+                # Neither production nor sandbox could validate → truly stale receipt
+                logger.error(f"[Apple IAP] Status 21002 from production, {sandbox_status} from sandbox — stale/stuck receipt")
+                raise HTTPException(
+                    status_code=422,
+                    detail="stale_receipt",
+                )
+            else:
+                apple_status = sandbox_status
+                logger.info(f"[Apple IAP] Using sandbox status: {apple_status}")
 
         if apple_status != 0:
             logger.error(f"[Apple IAP] Verification FAILED — Apple status: {apple_status}")
@@ -340,7 +355,8 @@ class PaymentService:
                 status_code=400,
                 detail=f"Apple receipt verification failed: status {apple_status}",
             )
-        logger.info("[Apple IAP] Receipt verified successfully!")
+        logger.info("[Apple IAP] Receipt verified successfully! ✅")
+
 
         latest_list = result.get("latest_receipt_info", [])
         if not latest_list:

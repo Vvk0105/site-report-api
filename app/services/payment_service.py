@@ -289,8 +289,9 @@ class PaymentService:
     ):
         from app.core.config import settings
 
-        # Strip whitespace — a common cause of 21002 (malformed data)
-        receipt_data = receipt_data.strip()
+        # Strip ALL whitespace including embedded newlines.
+        # StoreKit sometimes wraps base64 with line breaks → Apple returns 21002.
+        receipt_data = receipt_data.strip().replace('\n', '').replace('\r', '').replace(' ', '')
 
         payload = {
             "receipt-data": receipt_data,
@@ -425,8 +426,39 @@ class PaymentService:
             "notificationType"
         ) or payload.get("notification_type", "")
 
+        logger.info(f"[Apple Webhook] Received notification: {notification_type}")
+        logger.info(f"[Apple Webhook] Full payload keys: {list(payload.keys())}")
+
+        # Subscription activated or renewed → upgrade user
+        if notification_type in ("SUBSCRIBED", "DID_RENEW", "DID_RECOVER"):
+            data = payload.get("data", {})
+            transaction_info = data.get("transactionInfo") or data.get("transaction_info") or {}
+            original_transaction_id = (
+                transaction_info.get("originalTransactionId")
+                or data.get("originalTransactionId")
+                or payload.get("original_transaction_id")
+            )
+            product_id = (
+                transaction_info.get("productId")
+                or data.get("productId")
+                or payload.get("product_id")
+            )
+            logger.info(f"[Apple Webhook] SUBSCRIBED/RENEW — original_tx: {original_transaction_id}, product: {product_id}")
+
+            if original_transaction_id and product_id:
+                plan = await self.plan_repo.get_by_apple_product_id(product_id)
+                if plan:
+                    payment = await self.payment_repo.get_by_subscription(original_transaction_id)
+                    if payment:
+                        subscription = await self.subscription_repo.get_by_user_id(payment.user_id)
+                        if subscription:
+                            subscription.plan_id = plan.id
+                            subscription.status = SubscriptionStatus.ACTIVE
+                            await self.db.commit()
+                            logger.info(f"[Apple Webhook] Subscription activated for user {payment.user_id}")
+
         # Subscription expired or cancelled → downgrade to Free Plan
-        if notification_type in (
+        elif notification_type in (
             "DID_FAIL_TO_RENEW",
             "EXPIRED",
             "REVOKE",
@@ -454,5 +486,9 @@ class PaymentService:
                         subscription.status = SubscriptionStatus.CANCELLED
                         subscription.end_date = datetime.now(timezone.utc)
                         await self.db.commit()
+                        logger.info(f"[Apple Webhook] Subscription cancelled for user {payment.user_id}")
+        else:
+            logger.info(f"[Apple Webhook] Unhandled notification type: {notification_type}")
 
-        return {"received": True}
+        return {"received": True}
+

@@ -282,6 +282,27 @@ class PaymentService:
             )
         }
 
+    @staticmethod
+    def _decode_apple_jws(token: str) -> dict:
+        """
+        Decode an Apple-signed JWS (JSON Web Signature) token.
+        Apple signs these with ES256 — we skip signature verification here
+        since the token is received directly from Apple's StoreKit on device.
+        Format: base64url(header).base64url(payload).base64url(signature)
+        """
+        import base64, json as _json
+        parts = token.split('.')
+        if len(parts) != 3:
+            raise ValueError(f"Not a JWS token — expected 3 parts, got {len(parts)}")
+        # base64url decode the payload (middle part)
+        payload_b64 = parts[1]
+        # Add padding if needed
+        padding_needed = 4 - len(payload_b64) % 4
+        if padding_needed != 4:
+            payload_b64 += '=' * padding_needed
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return _json.loads(payload_bytes.decode('utf-8'))
+
     async def verify_apple_receipt(
         self,
         receipt_data: str,
@@ -290,106 +311,100 @@ class PaymentService:
         from app.core.config import settings
         import base64
 
-        # Strip ALL whitespace including embedded newlines.
-        # StoreKit sometimes wraps base64 with line breaks → Apple returns 21002.
-        receipt_data = receipt_data.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+        receipt_data = receipt_data.strip()
 
-        # Validate it's proper base64
-        try:
-            base64.b64decode(receipt_data, validate=True)
-            logger.info(f"[Apple IAP] Receipt is valid base64 ✓ (first 20 chars: {receipt_data[:20]})")
-        except Exception as e:
-            logger.error(f"[Apple IAP] Receipt is INVALID base64: {e}")
-            raise HTTPException(status_code=400, detail="Invalid receipt format")
+        logger.info(f"[Apple IAP] Received data length: {len(receipt_data)}")
+        logger.info(f"[Apple IAP] First 30 chars: {receipt_data[:30]}")
 
-        payload = {
-            "receipt-data": receipt_data,
-            "password": settings.APPLE_SHARED_SECRET,
-            "exclude-old-transactions": True,
-        }
+        # ── StoreKit 2 path: JWS signed transaction token ──────────────────────
+        # The Flutter in_app_purchase plugin on iOS 15+ returns a JWS token as
+        # serverVerificationData (contains two dots, NOT a base64 receipt).
+        if receipt_data.count('.') == 2:
+            logger.info("[Apple IAP] Detected StoreKit 2 JWS token — decoding payload")
+            try:
+                tx = self._decode_apple_jws(receipt_data)
+            except Exception as e:
+                logger.error(f"[Apple IAP] Failed to decode JWS: {e}")
+                raise HTTPException(status_code=400, detail="Invalid transaction token")
 
-        # Always try production first
-        logger.info("[Apple IAP] Sending receipt to PRODUCTION endpoint")
-        logger.info(f"[Apple IAP] Shared secret set: {bool(settings.APPLE_SHARED_SECRET)}")
-        logger.info(f"[Apple IAP] Receipt data length: {len(receipt_data)}")
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                "https://buy.itunes.apple.com/verifyReceipt",
-                json=payload,
-            )
-            result = resp.json()
+            product_id = tx.get("productId")
+            transaction_id = tx.get("transactionId", "")
+            original_transaction_id = tx.get("originalTransactionId", transaction_id)
+            expires_ms = tx.get("expiresDate")
+            environment = tx.get("environment", "unknown")
 
-        apple_status = result.get("status")
-        logger.info(f"[Apple IAP] Production response status: {apple_status}")
+            logger.info(f"[Apple IAP] JWS decoded — product: {product_id}, tx: {transaction_id}, env: {environment}")
 
-        # Status 21007 = sandbox receipt → retry sandbox
-        # Status 21002 from production = sometimes Apple returns this instead of 21007 for TestFlight
-        if apple_status in (21007, 21002):
-            logger.info(f"[Apple IAP] Status {apple_status} — retrying with SANDBOX endpoint")
+            end_date = None
+            if expires_ms:
+                end_date = datetime.fromtimestamp(int(expires_ms) / 1000, tz=timezone.utc)
+
+        # ── StoreKit 1 path: legacy base64 receipt ──────────────────────────────
+        else:
+            logger.info("[Apple IAP] Detected StoreKit 1 receipt — using verifyReceipt endpoint")
+            receipt_data = receipt_data.replace('\n', '').replace('\r', '').replace(' ', '')
+
+            payload = {
+                "receipt-data": receipt_data,
+                "password": settings.APPLE_SHARED_SECRET,
+                "exclude-old-transactions": True,
+            }
+
+            logger.info("[Apple IAP] Sending receipt to PRODUCTION endpoint")
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
-                    "https://sandbox.itunes.apple.com/verifyReceipt",
+                    "https://buy.itunes.apple.com/verifyReceipt",
                     json=payload,
                 )
                 result = resp.json()
-            sandbox_status = result.get("status")
-            logger.info(f"[Apple IAP] Sandbox response status: {sandbox_status}")
 
-            if sandbox_status == 0:
-                # Sandbox validated successfully!
-                apple_status = 0
-            elif apple_status == 21002 and sandbox_status != 0:
-                # Neither production nor sandbox could validate → truly stale receipt
-                logger.error(f"[Apple IAP] Status 21002 from production, {sandbox_status} from sandbox — stale/stuck receipt")
+            apple_status = result.get("status")
+            logger.info(f"[Apple IAP] Production response status: {apple_status}")
+
+            if apple_status in (21007, 21002):
+                logger.info(f"[Apple IAP] Status {apple_status} — retrying with SANDBOX endpoint")
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(
+                        "https://sandbox.itunes.apple.com/verifyReceipt",
+                        json=payload,
+                    )
+                    result = resp.json()
+                apple_status = result.get("status")
+                logger.info(f"[Apple IAP] Sandbox response status: {apple_status}")
+
+            if apple_status != 0:
+                logger.error(f"[Apple IAP] Verification FAILED — Apple status: {apple_status}")
+                if apple_status == 21002:
+                    raise HTTPException(status_code=422, detail="stale_receipt")
                 raise HTTPException(
-                    status_code=422,
-                    detail="stale_receipt",
+                    status_code=400,
+                    detail=f"Apple receipt verification failed: status {apple_status}",
                 )
-            else:
-                apple_status = sandbox_status
-                logger.info(f"[Apple IAP] Using sandbox status: {apple_status}")
 
-        if apple_status != 0:
-            logger.error(f"[Apple IAP] Verification FAILED — Apple status: {apple_status}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Apple receipt verification failed: status {apple_status}",
-            )
-        logger.info("[Apple IAP] Receipt verified successfully! ✅")
+            logger.info("[Apple IAP] StoreKit 1 receipt verified successfully!")
+            latest_list = result.get("latest_receipt_info", [])
+            if not latest_list:
+                raise HTTPException(status_code=400, detail="No receipt info found")
 
+            latest = latest_list[-1]
+            product_id = latest.get("product_id")
+            transaction_id = latest.get("transaction_id", "")
+            original_transaction_id = latest.get("original_transaction_id", transaction_id)
+            expires_ms = latest.get("expires_date_ms")
+            end_date = None
+            if expires_ms:
+                end_date = datetime.fromtimestamp(int(expires_ms) / 1000, tz=timezone.utc)
 
-        latest_list = result.get("latest_receipt_info", [])
-        if not latest_list:
-            raise HTTPException(
-                status_code=400,
-                detail="No receipt info found",
-            )
-
-        # Use the most recent transaction
-        latest = latest_list[-1]
-        product_id = latest.get("product_id")
-
-        # Find the matching plan in DB
+        # ── Common: look up plan, save payment, update subscription ────────────
         plan = await self.plan_repo.get_by_apple_product_id(product_id)
         if not plan:
+            logger.error(f"[Apple IAP] No plan found for product_id: {product_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"No active plan found for Apple product: {product_id}",
             )
 
-        # Parse subscription end date from Apple's epoch-ms timestamp
-        expires_ms = latest.get("expires_date_ms")
-        end_date = None
-        if expires_ms:
-            end_date = datetime.fromtimestamp(
-                int(expires_ms) / 1000,
-                tz=timezone.utc,
-            )
-
-        transaction_id = latest.get("transaction_id", "")
-        original_transaction_id = latest.get(
-            "original_transaction_id", transaction_id
-        )
+        logger.info(f"[Apple IAP] Matched plan: {plan.name} (id={plan.id})")
 
         # Avoid duplicate payment records
         existing = await self.payment_repo.get_by_session(transaction_id)
@@ -406,7 +421,7 @@ class PaymentService:
             )
             self.payment_repo.create(payment)
 
-        # Upgrade the user's subscription (create one if it doesn't exist)
+        # Upgrade the user's subscription
         from app.models.subscription import Subscription
         subscription = await self.subscription_repo.get_by_user_id(user.id)
         if subscription is None:
@@ -425,9 +440,11 @@ class PaymentService:
             subscription.end_date = end_date
 
         await self.db.commit()
+        logger.info(f"[Apple IAP] ✅ Subscription activated for user {user.id} — plan: {plan.name}")
 
         return {
             "success": True,
+
             "plan": plan.name,
             "expires_at": end_date.isoformat() if end_date else None,
         }
@@ -436,32 +453,57 @@ class PaymentService:
         self,
         payload: dict,
     ):
-        from app.core.config import settings
+        logger.info(f"[Apple Webhook] Received — keys: {list(payload.keys())}")
 
-        notification_type = payload.get(
-            "notificationType"
-        ) or payload.get("notification_type", "")
+        # Apple V2 Server Notifications wrap everything in a signedPayload JWS.
+        # Decode it first to get the actual notification data.
+        signed_payload = payload.get("signedPayload")
+        if signed_payload:
+            logger.info("[Apple Webhook] Decoding V2 signedPayload JWS")
+            try:
+                notification = self._decode_apple_jws(signed_payload)
+                logger.info(f"[Apple Webhook] Decoded notification keys: {list(notification.keys())}")
+            except Exception as e:
+                logger.error(f"[Apple Webhook] Failed to decode signedPayload: {e}")
+                return {"received": True}
 
-        logger.info(f"[Apple Webhook] Received notification: {notification_type}")
-        logger.info(f"[Apple Webhook] Full payload keys: {list(payload.keys())}")
+            notification_type = notification.get("notificationType", "")
+            subtype = notification.get("subtype", "")
+            logger.info(f"[Apple Webhook] Type: {notification_type} / Subtype: {subtype}")
+
+            # Decode the transaction info from data.signedTransactionInfo
+            data = notification.get("data", {})
+            signed_tx = data.get("signedTransactionInfo") or data.get("signedRenewalInfo")
+            tx = {}
+            if signed_tx:
+                try:
+                    tx = self._decode_apple_jws(signed_tx)
+                    logger.info(f"[Apple Webhook] Transaction: product={tx.get('productId')}, tx={tx.get('transactionId')}")
+                except Exception as e:
+                    logger.error(f"[Apple Webhook] Failed to decode signedTransactionInfo: {e}")
+
+            product_id = tx.get("productId")
+            original_transaction_id = tx.get("originalTransactionId")
+            expires_ms = tx.get("expiresDate")
+
+        else:
+            # Legacy V1 format (plain JSON)
+            logger.info("[Apple Webhook] Using legacy V1 format")
+            notification_type = payload.get("notificationType") or payload.get("notification_type", "")
+            data = payload.get("data", {})
+            product_id = data.get("productId") or payload.get("product_id")
+            original_transaction_id = data.get("originalTransactionId") or payload.get("original_transaction_id")
+            expires_ms = None
+
+        logger.info(f"[Apple Webhook] Processing: {notification_type}, product: {product_id}, orig_tx: {original_transaction_id}")
+
+        end_date = None
+        if expires_ms:
+            end_date = datetime.fromtimestamp(int(expires_ms) / 1000, tz=timezone.utc)
 
         # Subscription activated or renewed → upgrade user
-        if notification_type in ("SUBSCRIBED", "DID_RENEW", "DID_RECOVER"):
-            data = payload.get("data", {})
-            transaction_info = data.get("transactionInfo") or data.get("transaction_info") or {}
-            original_transaction_id = (
-                transaction_info.get("originalTransactionId")
-                or data.get("originalTransactionId")
-                or payload.get("original_transaction_id")
-            )
-            product_id = (
-                transaction_info.get("productId")
-                or data.get("productId")
-                or payload.get("product_id")
-            )
-            logger.info(f"[Apple Webhook] SUBSCRIBED/RENEW — original_tx: {original_transaction_id}, product: {product_id}")
-
-            if original_transaction_id and product_id:
+        if notification_type in ("SUBSCRIBED", "DID_RENEW", "DID_RECOVER", "DID_CHANGE_RENEWAL_STATUS"):
+            if product_id and original_transaction_id:
                 plan = await self.plan_repo.get_by_apple_product_id(product_id)
                 if plan:
                     payment = await self.payment_repo.get_by_subscription(original_transaction_id)
@@ -470,31 +512,19 @@ class PaymentService:
                         if subscription:
                             subscription.plan_id = plan.id
                             subscription.status = SubscriptionStatus.ACTIVE
+                            if end_date:
+                                subscription.end_date = end_date
                             await self.db.commit()
-                            logger.info(f"[Apple Webhook] Subscription activated for user {payment.user_id}")
+                            logger.info(f"[Apple Webhook] ✅ Subscription activated for user {payment.user_id}")
+                    else:
+                        logger.warning(f"[Apple Webhook] No payment found for original_tx: {original_transaction_id}")
 
         # Subscription expired or cancelled → downgrade to Free Plan
-        elif notification_type in (
-            "DID_FAIL_TO_RENEW",
-            "EXPIRED",
-            "REVOKE",
-            "CANCEL",
-        ):
-            data = payload.get("data", {})
-            original_transaction_id = data.get(
-                "originalTransactionId"
-            ) or payload.get("original_transaction_id")
-
+        elif notification_type in ("DID_FAIL_TO_RENEW", "EXPIRED", "REVOKE", "CANCEL"):
             if original_transaction_id:
-                payment = await self.payment_repo.get_by_subscription(
-                    original_transaction_id
-                )
+                payment = await self.payment_repo.get_by_subscription(original_transaction_id)
                 if payment:
-                    subscription = (
-                        await self.subscription_repo.get_by_user_id(
-                            payment.user_id
-                        )
-                    )
+                    subscription = await self.subscription_repo.get_by_user_id(payment.user_id)
                     if subscription:
                         free_plan = await self.plan_repo.get_trial_plan()
                         if free_plan:

@@ -53,18 +53,43 @@ class StripeService:
         user,
     ):
 
+        line_items = []
+        if plan.stripe_price_id:
+            line_items.append({
+                "price": plan.stripe_price_id,
+                "quantity": 1,
+            })
+        else:
+            # Fallback to inline price_data if price ID is not saved in DB
+            interval_map = {
+                "monthly": "month",
+                "yearly": "year",
+                "weekly": "week",
+                "daily": "day",
+            }
+            interval = interval_map.get(plan.billing_cycle.lower(), "month")
+            price_data = {
+                "currency": plan.currency.lower() if plan.currency else "usd",
+                "unit_amount": int(plan.price * 100),
+                "recurring": {"interval": interval},
+            }
+            if plan.stripe_product_id:
+                price_data["product"] = plan.stripe_product_id
+            else:
+                price_data["product_data"] = {"name": plan.name}
+                
+            line_items.append({
+                "price_data": price_data,
+                "quantity": 1,
+            })
+
         session = stripe.checkout.Session.create(
 
             mode="subscription",
 
             customer=user.stripe_customer_id,
 
-            line_items=[
-                {
-                    "price": plan.stripe_price_id,
-                    "quantity": 1,
-                }
-            ],
+            line_items=line_items,
 
             success_url="https://admin.sitesreports.com/payment-success?session_id={CHECKOUT_SESSION_ID}",
 

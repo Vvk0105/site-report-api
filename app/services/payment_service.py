@@ -111,13 +111,20 @@ class PaymentService:
                     "received": True,
                 }
 
-            user_id = int(
-                data["metadata"]["user_id"]
-            )
+            # Safely read metadata — old or external Stripe sessions may not have these
+            metadata = data.get("metadata") or {}
+            user_id_raw = metadata.get("user_id")
+            plan_id_raw = metadata.get("plan_id")
 
-            plan_id = int(
-                data["metadata"]["plan_id"]
-            )
+            if not user_id_raw or not plan_id_raw:
+                logger.warning(
+                    f"[Stripe Webhook] checkout.session.completed missing metadata "
+                    f"(session={data['id']}). Skipping."
+                )
+                return {"received": True}
+
+            user_id = int(user_id_raw)
+            plan_id = int(plan_id_raw)
 
             payment = Payment(
                 user_id=user_id,
@@ -148,6 +155,7 @@ class PaymentService:
             )
 
             await self.db.commit()
+
 
         elif event_type == "customer.subscription.deleted":
 

@@ -40,6 +40,7 @@ class Payment(
 
     stripe_subscription_id: Mapped[str] = mapped_column(
         String(255),
+        index=True,
     )
 
     stripe_payment_intent: Mapped[str | None] = mapped_column(

@@ -1,6 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -12,18 +10,8 @@ router = APIRouter(
     tags=["Plans"],
 )
 
-@router.get(
-    "",
-    response_model=list[PlanResponse],
-)
-async def get_plans(
-    db: AsyncSession = Depends(get_db),
-):
-    service = PlanService(db)
-    # We only want to return active plans for regular users
-    # Actually, the PlanService.list() returns all plans, but maybe we should filter active ones.
-    # Let's just use service.list() and filter it here, or use it directly.
-    plans = await service.list()
-    # Filter active plans
-    active_plans = [plan for plan in plans if plan.is_active]
-    return active_plans
+
+@router.get("", response_model=list[PlanResponse])
+async def get_plans(db: AsyncSession = Depends(get_db)):
+    """Plans a customer can buy. Inactive plans are filtered in SQL."""
+    return await PlanService(db).list_public()

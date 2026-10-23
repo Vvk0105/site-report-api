@@ -37,6 +37,7 @@ class Subscription(Base, TimestampMixin):
     status: Mapped[SubscriptionStatus] = mapped_column(
         Enum(SubscriptionStatus),
         nullable=False,
+        index=True,
         default=SubscriptionStatus.ACTIVE,
     )
 

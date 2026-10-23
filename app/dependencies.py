@@ -1,8 +1,5 @@
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi.security import HTTPAuthorizationCredentials
-from fastapi.security import HTTPBearer
-
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token
@@ -11,44 +8,38 @@ from app.repositories.user_repository import UserRepository
 
 security = HTTPBearer()
 
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ):
-
-    token = credentials.credentials
-
-    payload = decode_access_token(token)
+    payload = decode_access_token(credentials.credentials)
 
     if not payload:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token",
-        )
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-    user_id = int(payload["sub"])
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-    repo = UserRepository(db)
-
-    user = await repo.get_by_id(user_id)
+    user = await UserRepository(db).get_by_id(user_id)
 
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Deactivated (or deleted) accounts must lose access immediately,
+    # not when their token expires.
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
 
     return user
+
 
 async def get_current_admin(
     current_user=Depends(get_current_user),
 ):
-
     if not current_user.is_admin:
-
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required",
-        )
+        raise HTTPException(status_code=403, detail="Admin access required")
 
     return current_user

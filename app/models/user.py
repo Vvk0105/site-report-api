@@ -1,7 +1,5 @@
-from datetime import datetime
 
 from sqlalchemy import Boolean
-from sqlalchemy import DateTime
 from sqlalchemy import Integer
 from sqlalchemy import String
 

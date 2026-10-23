@@ -1,14 +1,33 @@
 from app.repositories.dashboard_repository import DashboardRepository
+from app.repositories.payment_repository import PaymentRepository
+
+INTERVAL_UNITS = {
+    "daily": "day",
+    "weekly": "week",
+    "monthly": "month",
+    "yearly": "year",
+}
+
+
+def _period_label(period, interval: str) -> str:
+    if interval == "daily":
+        return period.strftime("%Y-%m-%d")
+    if interval == "weekly":
+        year, week, _ = period.isocalendar()
+        return f"{year}-W{week:02d}"
+    if interval == "monthly":
+        return period.strftime("%Y-%m")
+    return period.strftime("%Y")
 
 
 class DashboardService:
 
     def __init__(self, db):
-
         self.repo = DashboardRepository(db)
+        self.payments = PaymentRepository(db)
 
-    async def dashboard(self):
-
+    async def dashboard(self) -> dict:
+        # Sequential on purpose: one AsyncSession cannot run queries concurrently.
         return {
             "total_users": await self.repo.total_users(),
             "active_users": await self.repo.active_users(),
@@ -19,35 +38,25 @@ class DashboardService:
             "reports_this_month": await self.repo.reports_this_month(),
         }
 
-    async def revenue_chart(self, interval: str, start_date, end_date):
-        payments = await self.repo.revenue_data(start_date, end_date)
-        
-        from collections import defaultdict
-        
-        aggregated = defaultdict(float)
-        
-        for payment in payments:
-            if not payment.created_at:
-                continue
-            
-            if interval == "daily":
-                key = payment.created_at.strftime("%Y-%m-%d")
-            elif interval == "weekly":
-                # ISO year and week number
-                year, week, _ = payment.created_at.isocalendar()
-                key = f"{year}-W{week:02d}"
-            elif interval == "monthly":
-                key = payment.created_at.strftime("%Y-%m")
-            elif interval == "yearly":
-                key = payment.created_at.strftime("%Y")
-            else:
-                key = payment.created_at.strftime("%Y-%m-%d")
-                
-            aggregated[key] += float(payment.amount)
-            
-        data = [{"date": k, "revenue": round(v, 2)} for k, v in aggregated.items()]
-        
-        # Sort chronologically
-        data.sort(key=lambda x: x["date"])
-        
-        return {"data": data}
+    async def revenue_chart(self, interval: str, start_date, end_date) -> dict:
+        rows = await self.payments.revenue_by_period(
+            start_date,
+            end_date,
+            INTERVAL_UNITS[interval],
+        )
+
+        # Aggregate per (label, currency): amounts in different currencies are never summed together.
+        totals: dict[tuple[str, str], float] = {}
+        for period, currency, amount in rows:
+            key = (_period_label(period, interval), currency)
+            totals[key] = totals.get(key, 0.0) + float(amount)
+
+        data = [
+            {"date": label, "currency": currency, "revenue": round(amount, 2)}
+            for (label, currency), amount in sorted(totals.items())
+        ]
+
+        return {
+            "currencies": sorted({currency for _, currency in totals}),
+            "data": data,
+        }

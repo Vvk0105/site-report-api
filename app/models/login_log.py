@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
@@ -37,7 +37,8 @@ class LoginLog(Base):
 
     login_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
         nullable=False,
     )
 

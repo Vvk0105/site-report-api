@@ -1,0 +1,12 @@
+# Keep secrets, history and local junk out of the image.
+.env
+*.env
+.git
+.gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+tests/
+certs/

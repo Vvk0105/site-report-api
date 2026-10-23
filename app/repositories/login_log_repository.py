@@ -1,16 +1,18 @@
+from sqlalchemy import and_, func, select
+
 from app.models.login_log import LoginLog
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy import or_
 from app.models.user import User
-from sqlalchemy import and_, asc, desc
+from app.utils.query import apply_order, escape_like, safe_sort_column
+
+LOGIN_LOG_SORT_COLUMNS = {"id", "login_at", "user_id"}
+
 
 class LoginLogRepository:
 
     def __init__(self, db):
         self.db = db
 
-    def create(self, log: LoginLog):
+    def create(self, log: LoginLog) -> None:
         self.db.add(log)
 
     async def admin_logs(
@@ -23,68 +25,31 @@ class LoginLogRepository:
         sort: str = "login_at",
         order: str = "desc",
     ):
-
-        query = (
-            select(
-                LoginLog,
-                User.email.label("email"),
-            )
-            .join(
-                User,
-                User.id == LoginLog.user_id,
-            )
+        query = select(LoginLog, User.email.label("email")).join(
+            User, User.id == LoginLog.user_id
         )
 
         filters = []
 
         if search:
-
-            filters.append(
-                User.email.ilike(
-                    f"%{search}%"
-                )
-            )
+            filters.append(User.email.ilike(f"%{escape_like(search)}%", escape="\\"))
 
         if date_from:
-
-            filters.append(
-                LoginLog.login_at >= date_from
-            )
+            filters.append(LoginLog.login_at >= date_from)
 
         if date_to:
-
-            filters.append(
-                LoginLog.login_at <= date_to
-            )
+            filters.append(LoginLog.login_at <= date_to)
 
         if filters:
+            query = query.where(and_(*filters))
 
-            query = query.where(
-                and_(*filters)
-            )
+        sort_column = safe_sort_column(LoginLog, sort, LOGIN_LOG_SORT_COLUMNS, "login_at")
+        query = apply_order(query, sort_column, order)
 
-        sort_column = getattr(
-            LoginLog,
-            sort,
-            LoginLog.login_at,
-        )
-
-        query = query.order_by(
-            asc(sort_column)
-            if order == "asc"
-            else desc(sort_column)
-        )
-
-        total = await self.db.scalar(
-            select(func.count()).select_from(
-                query.subquery()
-            )
-        )
+        total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
 
         result = await self.db.execute(
-            query.offset(
-                (page - 1) * page_size
-            ).limit(page_size)
+            query.offset((page - 1) * page_size).limit(page_size)
         )
 
         return total, result.all()

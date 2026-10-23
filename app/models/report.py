@@ -4,6 +4,7 @@ from sqlalchemy import DateTime
 from sqlalchemy import Enum
 from sqlalchemy import ForeignKey
 from sqlalchemy import String
+from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -18,8 +19,18 @@ class Report(Base, TimestampMixin):
 
     __tablename__ = "reports"
 
+    __table_args__ = (
+        # One server report per local report: makes /reports/start idempotent.
+        UniqueConstraint("user_id", "client_id", name="uq_reports_user_client"),
+    )
+
     id: Mapped[int] = mapped_column(
         primary_key=True,
+    )
+
+    client_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
     )
 
     report_number: Mapped[str] = mapped_column(

@@ -13,55 +13,32 @@ class OTPRepository:
         self,
         email: str,
         purpose: str = "login",
+        *,
+        lock: bool = False,
     ) -> OTPCode | None:
-
-        result = await self.db.execute(
-            select(OTPCode).where(
-                OTPCode.email == email,
-                OTPCode.purpose == purpose,
-            )
+        query = (
+            select(OTPCode)
+            .where(OTPCode.email == email, OTPCode.purpose == purpose)
+            .order_by(OTPCode.id.desc())
+            .limit(1)
         )
+        if lock:
+            # Serialises verification attempts so the attempt counter cannot be raced.
+            query = query.with_for_update()
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-        return result.scalar_one_or_none()
-
-    def create(
-        self,
-        otp: OTPCode,
-    ):
+    def create(self, otp: OTPCode) -> None:
         self.db.add(otp)
 
-
-    def update(
-        self,
-        otp: OTPCode,
-    ):
-        self.db.add(otp)
-
-        self.db.add(otp)
-
-    async def delete(
-        self,
-        otp: OTPCode,
-    ):
-
+    async def delete(self, otp: OTPCode) -> None:
         await self.db.delete(otp)
 
-    async def delete_by_email(
-        self,
-        email: str,
-        purpose: str = "login",
-    ):
-
+    async def delete_by_email(self, email: str, purpose: str = "login") -> None:
         await self.db.execute(
-            delete(OTPCode).where(
-                OTPCode.email == email,
-                OTPCode.purpose == purpose,
-            )
+            delete(OTPCode).where(OTPCode.email == email, OTPCode.purpose == purpose)
         )
 
-    def increment_attempt(
-        self,
-        otp: OTPCode,
-    ):
+    def increment_attempt(self, otp: OTPCode) -> None:
         otp.attempts += 1
         self.db.add(otp)

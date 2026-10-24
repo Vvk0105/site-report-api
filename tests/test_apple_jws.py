@@ -153,3 +153,27 @@ def test_root_certificate_in_der_form_is_accepted(chain, tmp_path, monkeypatch):
 
     token = _sign(chain, {"bundleId": "au.com.sitesreports.app", "productId": "pro"})
     assert verify_jws(token)["productId"] == "pro"
+
+
+def test_notification_with_nested_bundle_id_is_accepted(chain):
+    # App Store Server Notifications keep the bundle id under "data", not at the top level.
+    token = _sign(chain, {
+        "notificationType": "DID_RENEW",
+        "data": {"bundleId": "au.com.sitesreports.app", "environment": "Sandbox"},
+    })
+    assert verify_jws(token)["notificationType"] == "DID_RENEW"
+
+
+def test_notification_for_another_app_is_rejected(chain):
+    token = _sign(chain, {
+        "notificationType": "DID_RENEW",
+        "data": {"bundleId": "com.someone.else"},
+    })
+    with pytest.raises(AppleVerificationError):
+        verify_jws(token)
+
+
+def test_notification_without_any_bundle_id_is_rejected(chain):
+    token = _sign(chain, {"notificationType": "DID_RENEW", "data": {}})
+    with pytest.raises(AppleVerificationError):
+        verify_jws(token)

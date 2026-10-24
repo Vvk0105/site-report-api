@@ -83,6 +83,17 @@ def _verify_es256(parts: list[str], public_key) -> None:
         raise AppleVerificationError("JWS signature invalid") from exc
 
 
+def _bundle_id(payload: dict) -> str | None:
+    """
+    Transactions carry the bundle id at the top level. App Store Server Notifications
+    carry it one level down, under `data`.
+    """
+    bundle_id = payload.get("bundleId")
+    if bundle_id is None and isinstance(payload.get("data"), dict):
+        bundle_id = payload["data"].get("bundleId")
+    return bundle_id
+
+
 def verify_jws(token: str) -> dict:
     """Return the decoded payload of a verified Apple JWS, or raise AppleVerificationError."""
     parts = token.strip().split(".")
@@ -116,7 +127,7 @@ def verify_jws(token: str) -> dict:
     _verify_issued_by(leaf, intermediate)
     _verify_es256(parts, leaf.public_key())
 
-    if settings.APPLE_BUNDLE_ID and payload.get("bundleId") != settings.APPLE_BUNDLE_ID:
+    if settings.APPLE_BUNDLE_ID and _bundle_id(payload) != settings.APPLE_BUNDLE_ID:
         raise AppleVerificationError("Token is for a different app")
 
     return payload

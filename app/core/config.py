@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,6 +52,13 @@ class Settings(BaseSettings):
 
     APPLE_BUNDLE_ID: str = ""
 
+    # Optional demo account for App Store / Google Play review. Leave both empty to disable it.
+    # When set, this one email logs in with the fixed 6-digit code below instead of an emailed OTP.
+    # Use a throwaway non-admin account that holds no real data.
+    REVIEW_ACCOUNT_EMAIL: str = ""
+
+    REVIEW_ACCOUNT_OTP: str = ""
+
     # Maximum size of an uploaded report PDF, in bytes.
     MAX_REPORT_PDF_BYTES: int = 15 * 1024 * 1024
 
@@ -58,6 +66,17 @@ class Settings(BaseSettings):
         env_file=".env",
         extra="ignore",
     )
+
+    @field_validator("REVIEW_ACCOUNT_OTP")
+    @classmethod
+    def _review_otp_is_six_digits(cls, value: str) -> str:
+        if value and not (len(value) == 6 and value.isdigit()):
+            raise ValueError("REVIEW_ACCOUNT_OTP must be exactly 6 digits")
+        return value
+
+    @property
+    def review_account_enabled(self) -> bool:
+        return bool(self.REVIEW_ACCOUNT_EMAIL.strip() and self.REVIEW_ACCOUNT_OTP)
 
     @property
     def cors_origin_list(self) -> list[str]:

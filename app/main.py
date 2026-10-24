@@ -14,6 +14,7 @@ from app.api.v1.system import router as system_router
 from app.api.v1.users import router as users_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.core.logger import logger
 from app.db.database import SessionLocal
 from app.startup.seed import seed_admin, seed_plans
 
@@ -21,6 +22,12 @@ from app.startup.seed import seed_admin, seed_plans
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Schema changes are applied with `alembic upgrade head` (see the Dockerfile entrypoint).
+    if settings.review_account_enabled:
+        logger.warning(
+            "Review login is ENABLED for %s. Remove REVIEW_ACCOUNT_* from the environment when not needed.",
+            settings.REVIEW_ACCOUNT_EMAIL,
+        )
+
     async with SessionLocal() as db:
         await seed_admin(db)
         await seed_plans(db)

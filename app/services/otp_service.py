@@ -1,9 +1,11 @@
+import hmac
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 
+from app.core.config import settings
 from app.core.constants import (
     OTP_EXPIRE_MINUTES,
     OTP_MAX_ATTEMPTS,
@@ -38,8 +40,16 @@ class OTPService:
         self.refresh_repo = RefreshTokenRepository(db)
         self.email_service = email_service
 
+    @staticmethod
+    def _is_review_account(email: str) -> bool:
+        return settings.review_account_enabled and email == normalize_email(settings.REVIEW_ACCOUNT_EMAIL)
+
     async def send_otp(self, email: str) -> dict:
         email = normalize_email(email)
+
+        if self._is_review_account(email):
+            # Reviewers use the fixed code from the server settings; nothing is emailed.
+            return {"message": "OTP sent successfully"}
         now = datetime.now(timezone.utc)
 
         existing = await self.otp_repo.get_by_email(email)
@@ -81,6 +91,16 @@ class OTPService:
     async def verify_otp(self, email: str, otp: str) -> dict:
         email = normalize_email(email)
 
+        if self._is_review_account(email):
+            if not hmac.compare_digest(otp, settings.REVIEW_ACCOUNT_OTP):
+                raise HTTPException(status_code=400, detail="Invalid OTP")
+            otp_row = None
+        else:
+            otp_row = await self._check_otp(email, otp)
+
+        return await self._sign_in(email, otp_row)
+
+    async def _check_otp(self, email: str, otp: str) -> OTPCode:
         # Lock the row so parallel guesses cannot exceed OTP_MAX_ATTEMPTS.
         otp_row = await self.otp_repo.get_by_email(email, lock=True)
 
@@ -106,11 +126,19 @@ class OTPService:
             await self.db.commit()
             raise HTTPException(status_code=400, detail="Invalid OTP")
 
+        return otp_row
+
+    async def _sign_in(self, email: str, otp_row: OTPCode | None) -> dict:
         user = await self.user_repo.get_by_email(email)
 
+        # The shared review code must never unlock an administrator.
+        if otp_row is None and user and user.is_admin:
+            raise HTTPException(status_code=403, detail="This account cannot use the review login")
+
         if user and not user.is_active:
-            await self.otp_repo.delete(otp_row)
-            await self.db.commit()
+            if otp_row is not None:
+                await self.otp_repo.delete(otp_row)
+                await self.db.commit()
             raise HTTPException(status_code=403, detail="Account is deactivated")
 
         if not user:
@@ -128,7 +156,8 @@ class OTPService:
 
         refresh_token = self.refresh_repo.issue(user.id)
 
-        await self.otp_repo.delete(otp_row)
+        if otp_row is not None:
+            await self.otp_repo.delete(otp_row)
         await self.db.commit()
 
         return {

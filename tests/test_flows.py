@@ -475,3 +475,47 @@ def test_customer_portal_returns_url_for_paying_customer(client, monkeypatch, st
     response = client.get("/api/v1/payments/customer-portal", headers=_auth(user))
     assert response.status_code == 200
     assert response.json()["url"].startswith("https://portal/")
+
+
+# ─── App Store review login (opt-in, never hardcoded) ────────────────────
+
+REVIEW_EMAIL = "appreview@example.com"
+REVIEW_CODE = "482913"
+
+
+def test_review_account_logs_in_with_configured_code_without_email(client, monkeypatch):
+    monkeypatch.setattr(settings, "REVIEW_ACCOUNT_EMAIL", REVIEW_EMAIL)
+    monkeypatch.setattr(settings, "REVIEW_ACCOUNT_OTP", REVIEW_CODE)
+    SENT_OTPS.pop(REVIEW_EMAIL, None)
+
+    assert client.post("/api/v1/auth/send-otp", json={"email": REVIEW_EMAIL}).status_code == 200
+    assert REVIEW_EMAIL not in SENT_OTPS  # nothing was emailed
+
+    wrong = client.post("/api/v1/auth/verify-otp", json={"email": REVIEW_EMAIL, "otp": "000000"})
+    assert wrong.status_code == 400
+
+    ok = client.post("/api/v1/auth/verify-otp", json={"email": REVIEW_EMAIL, "otp": REVIEW_CODE})
+    assert ok.status_code == 200
+    # A normal user with the free trial, so the reviewer can use the whole app.
+    assert client.get("/api/v1/subscription", headers=_auth(ok.json())).json()["reports_remaining"] == 3
+
+
+def test_review_login_is_off_unless_configured(client):
+    assert not settings.review_account_enabled
+    response = client.post("/api/v1/auth/verify-otp", json={"email": REVIEW_EMAIL, "otp": REVIEW_CODE})
+    assert response.status_code == 400
+
+
+def test_review_code_never_unlocks_an_admin(client, monkeypatch):
+    monkeypatch.setattr(settings, "REVIEW_ACCOUNT_EMAIL", settings.ADMIN_EMAIL)
+    monkeypatch.setattr(settings, "REVIEW_ACCOUNT_OTP", REVIEW_CODE)
+
+    response = client.post("/api/v1/auth/verify-otp", json={"email": settings.ADMIN_EMAIL, "otp": REVIEW_CODE})
+    assert response.status_code == 403
+
+
+def test_review_code_must_be_six_digits():
+    from app.core.config import Settings
+
+    with pytest.raises(Exception):
+        Settings(REVIEW_ACCOUNT_OTP="12")
